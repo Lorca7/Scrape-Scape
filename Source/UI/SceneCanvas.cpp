@@ -185,6 +185,9 @@ void SceneCanvas::advanceAnimation (float seconds)
         if (m.y < -0.02f) { m.y = 1.02f; }
     }
 
+    const bool stopped = isPlaying && ! isPlaying();
+    stoppedDim = jlimit (0.0f, 1.0f, stoppedDim + (stopped ? seconds / 1.5f : -seconds / 0.8f));
+
     // Ease the background towards the current mood's colours.
     const auto& mood = getMood (getMoodIndex ? getMoodIndex() : 0);
     const float k = jmin (1.0f, seconds * 1.5f);
@@ -309,6 +312,16 @@ void SceneCanvas::paint (Graphics& g)
         g.drawText (String (mood.name) + dot + "chord on " + names[note % 12] + dot
                         + String (bank.countActive()) + "/" + String (kMaxElements) + " elements",
                     footer, Justification::bottomRight);
+    }
+
+    if (stoppedDim > 0.0f)
+    {
+        g.setColour (Colours::black.withAlpha (0.35f * stoppedDim));
+        g.fillRoundedRectangle (getLocalBounds().toFloat(), 12.0f);
+        g.setColour (Colours::white.withAlpha (0.7f * stoppedDim));
+        g.setFont (FontOptions (16.0f));
+        g.drawText (String::fromUTF8 ("Stopped  \xe2\x80\x94  press Play to start the music"), getLocalBounds().removeFromTop (getHeight() / 2 + 40)
+                        .removeFromBottom (40), Justification::centred);
     }
 
     if (flashTime > 0.0f)

@@ -21,6 +21,7 @@ public:
     std::function<int()> getSelectedType;     // element type to place on click
     std::function<int()> getMoodIndex;
     std::function<int()> getChordRoot;
+    std::function<bool()> isPlaying;
 
     void advanceAnimation (float seconds);
 
@@ -47,6 +48,7 @@ private:
     juce::Colour topColour, bottomColour;
     juce::String flashMessage;
     float flashTime = 0.0f;
+    float stoppedDim = 0.0f;   // 0 = playing, 1 = fully stopped (visual)
 
     struct Mote { float x, y, speed, phase, size; };
     std::vector<Mote> motes;

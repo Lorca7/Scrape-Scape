@@ -43,6 +43,11 @@ public:
     scape::EngineParams getEngineParams() const noexcept;
     int getChordRoot() const noexcept { return engine.getChordRoot(); }
 
+    // Transport: Stop fades the music out and pauses the engine; Play fades it back in.
+    void setPlaying (bool shouldPlay) noexcept { playing.store (shouldPlay); }
+    bool isPlaying() const noexcept { return playing.load(); }
+    bool isSilent() const noexcept { return engineIdle.load(); }
+
     // Recording (live output -> WAV)
     bool startRecording();
     void stopRecording();
@@ -66,6 +71,8 @@ private:
     Recorder recorder;
     OfflineRenderer renderer;
     double currentSampleRate = 0.0;
+    std::atomic<bool> playing { true }, engineIdle { false };
+    float transportGain = 1.0f;   // audio thread only
     std::vector<float> monoScratch = std::vector<float> (2 * 1024, 0.0f);
 
     std::atomic<float>* moodParam = nullptr;

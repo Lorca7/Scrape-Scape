@@ -33,7 +33,7 @@ private:
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
     };
 
-    bool showSubtitle() const noexcept { return getWidth() >= 1100; }
+    bool showSubtitle() const noexcept { return getWidth() >= 1240; }
     void timerCallback() override;
     void toggleRecording();
     void exportLastTake();
@@ -54,6 +54,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> moodAttachment;
 
     juce::TextButton scatterButton { "Scatter" }, clearButton { "Clear" };
+    juce::TextButton playButton;
     juce::TextButton recordButton { "Record" }, exportButton { "Export WAV..." };
     juce::TextButton renderButton { "Render WAV..." }, takesButton { "Takes" };
     juce::Label timeLabel;

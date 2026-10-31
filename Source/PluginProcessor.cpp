@@ -140,6 +140,16 @@ void ScrapeScapeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     if (buffer.getNumChannels() == 0 || n == 0)
         return;
 
+    // Transport: once fully faded out, the engine is paused (no CPU, no clock advance).
+    const bool play = playing.load();
+    if (! play && transportGain <= 0.0f)
+    {
+        engineIdle = true;
+        recorder.write (buffer); // keep a running take continuous (silence)
+        return;
+    }
+    engineIdle = false;
+
     engine.setParams (getEngineParams());
 
     if (buffer.getNumChannels() >= 2)
@@ -157,6 +167,20 @@ void ScrapeScapeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
             engine.process (monoScratch.data(), monoScratch.data() + chunk, len, elements);
             for (int i = 0; i < len; ++i)
                 mono[pos + i] = 0.5f * (monoScratch[(size_t) i] + monoScratch[(size_t) (chunk + i)]);
+        }
+    }
+
+    // Fade in over ~1 s on Play, out over ~1.5 s on Stop.
+    const float sr = (float) getCurrentSampleRate();
+    const float step = play ? 1.0f / sr : -1.0f / (1.5f * sr);
+    if (play ? transportGain < 1.0f : true)
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            transportGain = juce::jlimit (0.0f, 1.0f, transportGain + step);
+            const float g = transportGain * transportGain; // smoother perceived fade
+            for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+                buffer.getWritePointer (ch)[i] *= g;
         }
     }
 

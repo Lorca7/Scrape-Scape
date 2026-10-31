@@ -94,6 +94,22 @@ int main (int argc, char** argv)
         check (energy / (4.0 * sr / block) > 0.005, "audio continues after prepareToPlay is called again");
     }
 
+    // ---- Play / Stop transport ---------------------------------------------------
+    {
+        auto blockRms = [&] { proc->processBlock (buffer, midi); return buffer.getRMSLevel (0, 0, block); };
+        proc->setPlaying (false);
+        for (int i = 0; i < (int) (2.0 * sr / block); ++i) blockRms();   // fade out (1.5 s)
+        float stoppedLevel = 0.0f;
+        for (int i = 0; i < 20; ++i) stoppedLevel = juce::jmax (stoppedLevel, blockRms());
+        check (stoppedLevel == 0.0f && proc->isSilent(), "Stop fades out to silence and pauses the engine");
+
+        proc->setPlaying (true);
+        double energy = 0.0;
+        const int blocks = (int) (3.0 * sr / block);
+        for (int i = 0; i < blocks; ++i) energy += blockRms();
+        check (! proc->isSilent() && energy / blocks > 0.005, "Play resumes the music");
+    }
+
     // ---- State round trip --------------------------------------------------
     proc->getElements().clear();
     proc->getElements().add (scape::ElementType::Pluck, 0.25f, 0.75f, 1.5f);

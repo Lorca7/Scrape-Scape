@@ -48,6 +48,7 @@ The first build downloads JUCE 8 automatically, so it takes a few minutes. The o
 
 | Action | How |
 |---|---|
+| Start / stop the music | **▶ Play / ■ Stop**. Stop fades out gently and pauses; Play picks up where it left off |
 | Place an element | Choose it in the palette, then click the canvas |
 | Move | Drag it. Height sets the register (higher = higher pitch), left/right sets the stereo position |
 | Resize (louder/softer, wider influence) | Scroll over it |

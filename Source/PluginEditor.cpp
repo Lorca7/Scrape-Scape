@@ -40,6 +40,7 @@ ScrapeScapeEditor::ScrapeScapeEditor (ScrapeScapeProcessor& p)
     canvas.getSelectedType = [this] { return selectedType; };
     canvas.getMoodIndex = [this] { return processor.getEngineParams().mood; };
     canvas.getChordRoot = [this] { return processor.getChordRoot(); };
+    canvas.isPlaying = [this] { return processor.isPlaying(); };
     addAndMakeVisible (canvas);
 
     for (int t = 0; t < kNumElementTypes; ++t)
@@ -61,6 +62,14 @@ ScrapeScapeEditor::ScrapeScapeEditor (ScrapeScapeProcessor& p)
     clearButton.setTooltip ("Remove every element");
     clearButton.onClick = [this] { processor.getElements().clear(); };
 
+    playButton.setTooltip ("Start or stop the music (Stop fades out gently)");
+    playButton.setColour (TextButton::buttonOnColourId, Colour (0xff2f6f5a));
+    playButton.onClick = [this]
+    {
+        processor.setPlaying (! processor.isPlaying());
+        updateTransport();
+    };
+
     recordButton.setClickingTogglesState (false);
     recordButton.setTooltip ("Record the live output to a 24-bit WAV file");
     recordButton.onClick = [this] { toggleRecording(); };
@@ -79,7 +88,7 @@ ScrapeScapeEditor::ScrapeScapeEditor (ScrapeScapeProcessor& p)
     timeLabel.setColour (Label::textColourId, ScapeColours::textDim);
     timeLabel.setText ("00:00", dontSendNotification);
 
-    for (auto* c : std::initializer_list<Component*> { &scatterButton, &clearButton, &recordButton, &exportButton,
+    for (auto* c : std::initializer_list<Component*> { &playButton, &scatterButton, &clearButton, &recordButton, &exportButton,
                                                        &renderButton, &takesButton, &timeLabel })
         addAndMakeVisible (c);
 
@@ -94,8 +103,8 @@ ScrapeScapeEditor::ScrapeScapeEditor (ScrapeScapeProcessor& p)
     setLookAndFeel (&lookAndFeel);
 
     setResizable (true, true);
-    setResizeLimits (960, 640, 2400, 1600);
-    setSize (1120, 740);
+    setResizeLimits (1080, 640, 2400, 1600);
+    setSize (1180, 760);
 
     updateTransport();
     lastTimerSeconds = Time::getMillisecondCounterHiRes() * 0.001;
@@ -173,8 +182,10 @@ void ScrapeScapeEditor::resized()
     exportButton.setBounds (header.removeFromRight (108));
     header.removeFromRight (6);
     timeLabel.setBounds (header.removeFromRight (58));
-    recordButton.setBounds (header.removeFromRight (86));
-    header.removeFromRight (24);
+    recordButton.setBounds (header.removeFromRight (100));
+    header.removeFromRight (26);
+    playButton.setBounds (header.removeFromRight (84));
+    header.removeFromRight (20);
 
     moodBox.setBounds (header.removeFromLeft (118));
     header.removeFromLeft (6);
@@ -245,9 +256,13 @@ void ScrapeScapeEditor::timerCallback()
 
 void ScrapeScapeEditor::updateTransport()
 {
+    const bool playing = processor.isPlaying();
+    playButton.setToggleState (playing, dontSendNotification);
+    playButton.setButtonText (String::fromUTF8 (playing ? "\xe2\x96\xa0  Stop" : "\xe2\x96\xb6  Play"));
+
     const bool recording = processor.isRecording();
     recordButton.setToggleState (recording, dontSendNotification);
-    recordButton.setButtonText (recording ? "Stop" : "Record");
+    recordButton.setButtonText (String::fromUTF8 (recording ? "\xe2\x96\xa0  Stop Rec" : "\xe2\x97\x8f  Record"));
 
     const double secs = recording ? processor.getSecondsRecorded() : 0.0;
     if (recording)
