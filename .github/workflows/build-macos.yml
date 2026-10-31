@@ -1,0 +1,59 @@
+name: Build macOS
+
+on:
+  push:
+    branches: [ '**' ]
+    tags: [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure (universal arm64 + x86_64, macOS 11+)
+        run: |
+          cmake -B build -G "Unix Makefiles" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+            -DSCAPE_BUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build --config Release -j 3
+
+      - name: Smoke test (record, export, offline render, state)
+        run: ./build/ScrapeScapeTests_artefacts/Release/ScrapeScapeTests "$RUNNER_TEMP"
+
+      - name: Package
+        run: |
+          set -e
+          ART=build/ScrapeScape_artefacts/Release
+          mkdir -p dist/Scrape-Scape
+          cp -R "$ART/Standalone/Scrape-Scape.app" dist/Scrape-Scape/
+          cp -R "$ART/VST3/Scrape-Scape.vst3"      dist/Scrape-Scape/
+          cp -R "$ART/AU/Scrape-Scape.component"   dist/Scrape-Scape/
+          for b in dist/Scrape-Scape/*.app dist/Scrape-Scape/*.vst3 dist/Scrape-Scape/*.component; do
+            codesign --force --deep --sign - "$b"
+          done
+          lipo -info "dist/Scrape-Scape/Scrape-Scape.app/Contents/MacOS/Scrape-Scape"
+          cp scripts/install_mac.command dist/Scrape-Scape/
+          chmod +x dist/Scrape-Scape/install_mac.command
+          cp README.md dist/Scrape-Scape/
+          cd dist && ditto -c -k --keepParent Scrape-Scape Scrape-Scape-macOS.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Scrape-Scape-macOS
+          path: dist/Scrape-Scape-macOS.zip
+
+      - name: Publish release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/Scrape-Scape-macOS.zip
