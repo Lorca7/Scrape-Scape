@@ -5,7 +5,8 @@ using namespace juce;
 using namespace scape;
 
 //==============================================================================
-void drawElementGlyph (Graphics& g, int type, Point<float> c, float r, float activity, float time, bool highlighted)
+void drawElementGlyph (Graphics& g, int type, Point<float> c, float r, float activity, float time, bool highlighted,
+                       const Image* customImage)
 {
     const auto& info = getElementInfo (type);
     const Colour col (info.colour);
@@ -18,6 +19,27 @@ void drawElementGlyph (Graphics& g, int type, Point<float> c, float r, float act
                              col.withAlpha (0.0f), c.x + glowR, c.y, true);
         g.setGradientFill (glow);
         g.fillEllipse (c.x - glowR, c.y - glowR, glowR * 2.0f, glowR * 2.0f);
+    }
+
+    if (customImage != nullptr && customImage->isValid())
+    {
+        // The user's cut-out: fit inside a box a little larger than the built-in glyph,
+        // breathing slightly with the element's activity.
+        const float box = r * 2.6f * (1.0f + 0.07f * a);
+        const auto dest = Rectangle<float> (box, box).withCentre (c);
+        Graphics::ScopedSaveState state (g);
+        g.setImageResamplingQuality (Graphics::mediumResamplingQuality);
+        g.setOpacity (0.85f + 0.15f * a);
+        g.drawImage (*customImage, dest, RectanglePlacement::centred);
+
+        if (highlighted)
+        {
+            g.setOpacity (1.0f);
+            g.setColour (Colours::white.withAlpha (0.6f));
+            const float hr = r * 1.55f;
+            g.drawEllipse (c.x - hr, c.y - hr, hr * 2, hr * 2, 1.0f);
+        }
+        return;
     }
 
     const Colour fill = col.withAlpha (0.85f);
@@ -161,7 +183,7 @@ void drawElementGlyph (Graphics& g, int type, Point<float> c, float r, float act
 }
 
 //==============================================================================
-SceneCanvas::SceneCanvas (ElementBank& b) : bank (b)
+SceneCanvas::SceneCanvas (ElementBank& b, SkinBank& sk) : bank (b), skins (sk)
 {
     Random rand (1234);
     for (int i = 0; i < 60; ++i)
@@ -171,6 +193,13 @@ SceneCanvas::SceneCanvas (ElementBank& b) : bank (b)
     topColour = Colour (getMood (0).topColour);
     bottomColour = Colour (getMood (0).bottomColour);
     setRepaintsOnMouseActivity (false);
+}
+
+void SceneCanvas::flash (const String& message, float seconds)
+{
+    flashMessage = message;
+    flashTime = seconds;
+    repaint();
 }
 
 void SceneCanvas::advanceAnimation (float seconds)
@@ -282,6 +311,10 @@ void SceneCanvas::paint (Graphics& g)
         g.fillPath (dashed);
     }
 
+    std::array<Image, kNumElementTypes> glyphs;
+    for (int t = 0; t < kNumElementTypes; ++t)
+        glyphs[(size_t) t] = skins.getGlyph (t);
+
     for (int i = 0; i < kMaxElements; ++i)
     {
         const auto e = bank.get (i);
@@ -293,7 +326,8 @@ void SceneCanvas::paint (Graphics& g)
         if (getElementInfo (e.type).isModifier)
             act = 0.4f + 0.3f * std::sin (time * 1.3f + (float) i);
 
-        drawElementGlyph (g, e.type, c, radiusFor (e.type, e.size), act, time + (float) i, i == hoverIndex || i == dragIndex);
+        drawElementGlyph (g, e.type, c, radiusFor (e.type, e.size), act, time + (float) i, i == hoverIndex || i == dragIndex,
+                          &glyphs[(size_t) jlimit (0, kNumElementTypes - 1, e.type)]);
     }
 
     // Footer hints and status.

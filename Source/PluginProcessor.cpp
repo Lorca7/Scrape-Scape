@@ -200,12 +200,13 @@ void ScrapeScapeProcessor::stopRecording()
 }
 
 //==============================================================================
-void ScrapeScapeProcessor::getStateInformation (juce::MemoryBlock& destData)
+juce::ValueTree ScrapeScapeProcessor::createStateTree()
 {
     auto state = parameters.copyState();
 
-    if (auto old = state.getChildWithName ("Elements"); old.isValid())
-        state.removeChild (old, nullptr);
+    for (auto name : { "Elements", "Skins" })
+        if (auto old = state.getChildWithName (name); old.isValid())
+            state.removeChild (old, nullptr);
 
     juce::ValueTree list ("Elements");
     for (int i = 0; i < kMaxElements; ++i)
@@ -222,21 +223,19 @@ void ScrapeScapeProcessor::getStateInformation (juce::MemoryBlock& destData)
         list.appendChild (node, nullptr);
     }
     state.appendChild (list, nullptr);
-
-    if (auto xml = state.createXml())
-        copyXmlToBinary (*xml, destData);
+    state.appendChild (skins.toValueTree(), nullptr);
+    state.setProperty ("presetName", getCurrentPresetName(), nullptr);
+    return state;
 }
 
-void ScrapeScapeProcessor::setStateInformation (const void* data, int sizeInBytes)
+void ScrapeScapeProcessor::applyStateTree (const juce::ValueTree& source, bool includeSkins)
 {
-    auto xml = getXmlFromBinary (data, sizeInBytes);
-    if (xml == nullptr || ! xml->hasTagName (parameters.state.getType()))
+    if (! source.hasType (parameters.state.getType()))
         return;
 
-    auto state = juce::ValueTree::fromXml (*xml);
-    auto list = state.getChildWithName ("Elements");
+    auto state = source.createCopy();
 
-    if (list.isValid())
+    if (auto list = state.getChildWithName ("Elements"); list.isValid())
     {
         elements.clear();
         int slot = 0;
@@ -255,7 +254,147 @@ void ScrapeScapeProcessor::setStateInformation (const void* data, int sizeInByte
         state.removeChild (list, nullptr);
     }
 
+    if (auto skinTree = state.getChildWithName ("Skins"); skinTree.isValid())
+    {
+        if (includeSkins)
+            skins.fromValueTree (skinTree);
+        state.removeChild (skinTree, nullptr);
+    }
+    else if (includeSkins)
+    {
+        skins.resetAll();
+    }
+
+    if (state.hasProperty ("presetName"))
+    {
+        const juce::ScopedLock sl (presetNameLock);
+        currentPresetName = state.getProperty ("presetName").toString();
+    }
+
     parameters.replaceState (state);
+}
+
+void ScrapeScapeProcessor::getStateInformation (juce::MemoryBlock& destData)
+{
+    if (auto xml = createStateTree().createXml())
+        copyXmlToBinary (*xml, destData);
+}
+
+void ScrapeScapeProcessor::setStateInformation (const void* data, int sizeInBytes)
+{
+    if (auto xml = getXmlFromBinary (data, sizeInBytes))
+        applyStateTree (juce::ValueTree::fromXml (*xml));
+}
+
+//==============================================================================
+juce::File ScrapeScapeProcessor::getPresetsFolder()
+{
+    auto folder = juce::File::getSpecialLocation (juce::File::userMusicDirectory)
+                      .getChildFile ("Scrape-Scape").getChildFile ("Presets");
+    folder.createDirectory();
+    return folder;
+}
+
+juce::String ScrapeScapeProcessor::getCurrentPresetName() const
+{
+    const juce::ScopedLock sl (presetNameLock);
+    return currentPresetName;
+}
+
+bool ScrapeScapeProcessor::savePreset (const juce::File& file)
+{
+    {
+        const juce::ScopedLock sl (presetNameLock);
+        currentPresetName = file.getFileNameWithoutExtension();
+    }
+
+    auto state = createStateTree();
+    state.setProperty ("formatVersion", 1, nullptr);
+
+    if (auto xml = state.createXml())
+        return xml->writeTo (file);
+    return false;
+}
+
+bool ScrapeScapeProcessor::loadPreset (const juce::File& file)
+{
+    auto xml = juce::XmlDocument::parse (file);
+    if (xml == nullptr || ! xml->hasTagName (parameters.state.getType()))
+        return false;
+
+    auto state = juce::ValueTree::fromXml (*xml);
+    state.setProperty ("presetName", file.getFileNameWithoutExtension(), nullptr);
+    applyStateTree (state);
+    return true;
+}
+
+namespace
+{
+    struct FactoryElement { ElementType type; float x, y, size; };
+    struct FactoryPreset
+    {
+        const char* name;
+        int mood;
+        float activity, brightness, tempo, reverb, delay;
+        std::vector<FactoryElement> elements;
+    };
+
+    const std::vector<FactoryPreset>& getFactoryPresets()
+    {
+        using T = ElementType;
+        static const std::vector<FactoryPreset> presets = {
+            { "First Light", 0, 0.45f, 0.65f, 62.0f, 0.55f, 0.30f,
+              { { T::Drone, 0.28f, 0.58f, 1.2f }, { T::Bass, 0.52f, 0.82f, 1.0f }, { T::Bell, 0.70f, 0.30f, 1.0f },
+                { T::Shimmer, 0.84f, 0.18f, 0.9f }, { T::Spark, 0.76f, 0.24f, 0.8f } } },
+            { "Undertow", 1, 0.35f, 0.45f, 54.0f, 0.65f, 0.40f,
+              { { T::Bass, 0.40f, 0.86f, 1.3f }, { T::Drone, 0.22f, 0.72f, 1.3f }, { T::Wind, 0.68f, 0.55f, 1.1f },
+                { T::Pulse, 0.80f, 0.40f, 0.8f }, { T::Shade, 0.30f, 0.70f, 1.2f } } },
+            { "Embers", 2, 0.55f, 0.40f, 60.0f, 0.50f, 0.35f,
+              { { T::Drone, 0.50f, 0.64f, 1.1f }, { T::Pluck, 0.25f, 0.45f, 1.0f }, { T::Pluck, 0.78f, 0.35f, 0.8f },
+                { T::Bass, 0.55f, 0.88f, 1.0f }, { T::Shade, 0.70f, 0.60f, 0.9f } } },
+            { "Glass Garden", 3, 0.60f, 0.80f, 70.0f, 0.60f, 0.45f,
+              { { T::Bell, 0.25f, 0.30f, 1.0f }, { T::Bell, 0.70f, 0.22f, 0.8f }, { T::Shimmer, 0.50f, 0.15f, 1.0f },
+                { T::Pluck, 0.40f, 0.50f, 0.9f }, { T::Drone, 0.60f, 0.65f, 0.9f }, { T::Spark, 0.30f, 0.35f, 1.0f } } },
+            { "Night Window", 5, 0.30f, 0.35f, 48.0f, 0.75f, 0.25f,
+              { { T::Drone, 0.35f, 0.70f, 1.4f }, { T::Wind, 0.72f, 0.45f, 1.0f }, { T::Bell, 0.60f, 0.25f, 0.8f },
+                { T::Shade, 0.30f, 0.55f, 1.1f }, { T::Shade, 0.75f, 0.35f, 0.7f } } },
+        };
+        return presets;
+    }
+}
+
+juce::StringArray ScrapeScapeProcessor::getFactoryPresetNames()
+{
+    juce::StringArray names;
+    for (auto& p : getFactoryPresets())
+        names.add (p.name);
+    return names;
+}
+
+void ScrapeScapeProcessor::loadFactoryPreset (int index)
+{
+    const auto& presets = getFactoryPresets();
+    if (index < 0 || index >= (int) presets.size()) return;
+    const auto& p = presets[(size_t) index];
+
+    auto setParam = [this] (const char* id, float value)
+    {
+        if (auto* param = parameters.getParameter (id))
+            param->setValueNotifyingHost (param->convertTo0to1 (value));
+    };
+    setParam (ParamIDs::mood, (float) p.mood);
+    setParam (ParamIDs::activity, p.activity);
+    setParam (ParamIDs::brightness, p.brightness);
+    setParam (ParamIDs::tempo, p.tempo);
+    setParam (ParamIDs::reverb, p.reverb);
+    setParam (ParamIDs::delay, p.delay);
+
+    elements.clear();
+    for (auto& e : p.elements)
+        elements.add (e.type, e.x, e.y, e.size);
+
+    const juce::ScopedLock sl (presetNameLock);
+    currentPresetName = p.name;   // factory scenes keep your custom images
 }
 
 //==============================================================================

@@ -2,6 +2,7 @@
 
 #include "Engine/Elements.h"
 #include "Engine/Moods.h"
+#include "Skins.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -9,14 +10,17 @@
 
 // Draws an element glyph. Shared by the canvas and the palette buttons.
 void drawElementGlyph (juce::Graphics& g, int type, juce::Point<float> centre, float radius,
-                       float activity, float time, bool highlighted);
+                       float activity, float time, bool highlighted,
+                       const juce::Image* customImage = nullptr);
 
 // The interactive scene: click to place the selected element, drag to move,
 // scroll to resize, double-click / right-click to remove.
 class SceneCanvas : public juce::Component
 {
 public:
-    explicit SceneCanvas (scape::ElementBank& bank);
+    SceneCanvas (scape::ElementBank& bank, SkinBank& skins);
+
+    void flash (const juce::String& message, float seconds = 2.5f);
 
     std::function<int()> getSelectedType;     // element type to place on click
     std::function<int()> getMoodIndex;
@@ -42,6 +46,7 @@ private:
     void paintBackground (juce::Graphics&);
 
     scape::ElementBank& bank;
+    SkinBank& skins;
     int dragIndex = -1, hoverIndex = -1;
     juce::Point<float> dragOffset;
     float time = 0.0f;

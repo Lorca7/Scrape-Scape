@@ -56,6 +56,8 @@ target_sources(ScrapeScape PRIVATE
     Source/Engine/ScapeEngine.cpp
     Source/Recorder.cpp
     Source/OfflineRenderer.cpp
+    Source/Skins.cpp
+    Source/UI/ImageOutliner.cpp
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
     Source/UI/SceneCanvas.cpp

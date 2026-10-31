@@ -55,6 +55,8 @@ The first build downloads JUCE 8 automatically, so it takes a few minutes. The o
 | Remove | Double-click, right-click or ⌥-click |
 | Change the whole feel | **Mood**: Dawn, Tide, Ember, Glacier, Dusk or Night (key, scale, pace, colour) |
 | Random scene / start over | **Scatter** / **Clear** |
+| Use your own picture for an element | Drop an image on its palette slot, or right-click the slot |
+| Save / load everything | **Presets ▾** |
 
 **Elements**
 
@@ -72,6 +74,39 @@ A shared conductor moves through a slow chord progression, so every element stay
 element has its own random seed, so no two placements behave the same way.
 
 **Knobs:** Activity, Brightness, Tempo, Reverb, Echo and Volume. All of them can be automated in a DAW.
+
+## Your own images
+
+Any element can be drawn with your own picture instead of its built-in icon.
+
+1. **Drag an image file onto a palette slot** (Drone, Bell, Shade, ...). If you drop it anywhere else
+   in the window, it goes to the currently selected slot. You can also right-click a slot and choose
+   **Use an image...**.
+2. In the outline editor, pick how to select the part you want:
+   - **Freehand**: draw around it like a lasso
+   - **Ellipse** / **Rectangle**: drag out a shape
+   - **Whole image**: use all of it
+
+   The preview on the right shows how it will look on the canvas. Click **Use this** (or press Return).
+3. Every element of that type on the canvas now uses your cut-out. It glows and pulses with the sound.
+
+Right-click a slot to **Re-outline** the image or go **Back to the built-in icon**.
+
+Supported formats on macOS: **JPEG, PNG, TIFF, HEIC, GIF, BMP, WebP, PSD**. Images are stored
+inside your presets and DAW projects, so they travel with them.
+
+![outliner](docs/outliner.png)
+
+## Presets
+
+**Presets ▾** saves and loads *everything*: the elements and their positions, mood, all knobs, and
+your custom images.
+
+- **Save preset...** writes a `.scapepreset` file (by default to `~/Music/Scrape-Scape/Presets/`).
+  Saved presets appear in the menu under **My presets**.
+- **Load preset from file...** loads one from anywhere, or drag a `.scapepreset` file onto the window.
+- **Factory scenes** gives you five starting points. They change the scene and knobs but keep
+  your images.
 
 ## Recording & exporting WAV
 

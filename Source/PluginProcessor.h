@@ -3,6 +3,7 @@
 #include "Engine/ScapeEngine.h"
 #include "OfflineRenderer.h"
 #include "Recorder.h"
+#include "Skins.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -59,6 +60,22 @@ public:
     OfflineRenderer& getRenderer() noexcept { return renderer; }
     double getCurrentSampleRate() const noexcept { return currentSampleRate > 0.0 ? currentSampleRate : 48000.0; }
 
+    // Custom element images
+    SkinBank& getSkins() noexcept { return skins; }
+
+    // Full state (parameters + elements + images), used for host state and presets.
+    juce::ValueTree createStateTree();
+    void applyStateTree (const juce::ValueTree& state, bool includeSkins = true);
+
+    // Presets
+    static constexpr const char* presetExtension = ".scapepreset";
+    static juce::File getPresetsFolder();
+    bool savePreset (const juce::File& file);
+    bool loadPreset (const juce::File& file);
+    static juce::StringArray getFactoryPresetNames();
+    void loadFactoryPreset (int index);
+    juce::String getCurrentPresetName() const;
+
     void loadDefaultScene();
     void scatterScene (juce::Random& random);
 
@@ -67,6 +84,9 @@ public:
 private:
     juce::AudioProcessorValueTreeState parameters;
     scape::ElementBank elements;
+    SkinBank skins;
+    mutable juce::CriticalSection presetNameLock;
+    juce::String currentPresetName { "Default" };
     scape::ScapeEngine engine;
     Recorder recorder;
     OfflineRenderer renderer;

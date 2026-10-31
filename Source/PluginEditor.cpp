@@ -4,12 +4,23 @@ using namespace juce;
 using namespace scape;
 
 //==============================================================================
-ScrapeScapeEditor::ElementButton::ElementButton (int t)
-    : Button (getElementInfo (t).name), type (t)
+ScrapeScapeEditor::ElementButton::ElementButton (int t, SkinBank& sk)
+    : Button (getElementInfo (t).name), type (t), skins (sk)
 {
     setClickingTogglesState (true);
     setRadioGroupId (1001);
-    setTooltip (String (getElementInfo (t).name) + String::fromUTF8 (" \xe2\x80\x94 ") + getElementInfo (t).description);
+    setTooltip (String (getElementInfo (t).name) + String::fromUTF8 (" \xe2\x80\x94 ") + getElementInfo (t).description
+                + "\n\nDrop a photo here (or right-click) to use your own image for this element.");
+}
+
+void ScrapeScapeEditor::ElementButton::mouseDown (const MouseEvent& e)
+{
+    if (e.mods.isPopupMenu())
+    {
+        if (onMenuRequested) onMenuRequested();
+        return;
+    }
+    Button::mouseDown (e);
 }
 
 void ScrapeScapeEditor::ElementButton::paintButton (Graphics& g, bool over, bool down)
@@ -24,8 +35,17 @@ void ScrapeScapeEditor::ElementButton::paintButton (Graphics& g, bool over, bool
 
     auto iconArea = bounds.withTrimmedBottom (18.0f);
     const float r = jmin (iconArea.getWidth(), iconArea.getHeight()) * 0.24f * (down ? 0.92f : 1.0f);
+    const auto glyph = skins.getGlyph (type);
     drawElementGlyph (g, type, iconArea.getCentre(), r, getToggleState() ? 0.6f : 0.15f,
-                      (float) Time::getMillisecondCounter() * 0.001f, false);
+                      (float) Time::getMillisecondCounter() * 0.001f, false, &glyph);
+
+    if (dropHighlight)
+    {
+        g.setColour (col.withAlpha (0.25f));
+        g.fillRoundedRectangle (bounds, 9.0f);
+        g.setColour (Colours::white);
+        g.drawRoundedRectangle (bounds, 9.0f, 2.0f);
+    }
 
     g.setColour (getToggleState() ? ScapeColours::text : ScapeColours::textDim);
     g.setFont (FontOptions (12.0f));
@@ -34,7 +54,7 @@ void ScrapeScapeEditor::ElementButton::paintButton (Graphics& g, bool over, bool
 
 //==============================================================================
 ScrapeScapeEditor::ScrapeScapeEditor (ScrapeScapeProcessor& p)
-    : AudioProcessorEditor (&p), processor (p), canvas (p.getElements())
+    : AudioProcessorEditor (&p), processor (p), canvas (p.getElements(), p.getSkins())
 {
 
     canvas.getSelectedType = [this] { return selectedType; };
@@ -45,8 +65,9 @@ ScrapeScapeEditor::ScrapeScapeEditor (ScrapeScapeProcessor& p)
 
     for (int t = 0; t < kNumElementTypes; ++t)
     {
-        auto* b = paletteButtons.add (new ElementButton (t));
+        auto* b = paletteButtons.add (new ElementButton (t, processor.getSkins()));
         b->onClick = [this, b] { if (b->getToggleState()) selectedType = b->type; };
+        b->onMenuRequested = [this, t] { showPaletteMenu (t); };
         addAndMakeVisible (b);
     }
     paletteButtons[0]->setToggleState (true, dontSendNotification);
@@ -70,6 +91,10 @@ ScrapeScapeEditor::ScrapeScapeEditor (ScrapeScapeProcessor& p)
         updateTransport();
     };
 
+    presetButton.setButtonText (String::fromUTF8 ("Presets \xe2\x96\xbe"));
+    presetButton.setTooltip ("Save or load everything: scene, knobs, mood and your images");
+    presetButton.onClick = [this] { showPresetMenu(); };
+
     recordButton.setClickingTogglesState (false);
     recordButton.setTooltip ("Record the live output to a 24-bit WAV file");
     recordButton.onClick = [this] { toggleRecording(); };
@@ -88,7 +113,7 @@ ScrapeScapeEditor::ScrapeScapeEditor (ScrapeScapeProcessor& p)
     timeLabel.setColour (Label::textColourId, ScapeColours::textDim);
     timeLabel.setText ("00:00", dontSendNotification);
 
-    for (auto* c : std::initializer_list<Component*> { &playButton, &scatterButton, &clearButton, &recordButton, &exportButton,
+    for (auto* c : std::initializer_list<Component*> { &playButton, &presetButton, &scatterButton, &clearButton, &recordButton, &exportButton,
                                                        &renderButton, &takesButton, &timeLabel })
         addAndMakeVisible (c);
 
@@ -99,12 +124,22 @@ ScrapeScapeEditor::ScrapeScapeEditor (ScrapeScapeProcessor& p)
     addKnob (echo, "delay", "Echo", Colour (0xff8fd6d6));
     addKnob (volume, "volume", "Volume", Colour (0xffe8ecf5));
 
+    outliner.onApply = [this] (int type, ElementSkin skin)
+    {
+        processor.getSkins().set (type, std::move (skin));
+        closeOutliner();
+        canvas.flash (String (getElementInfo (type).name) + " now uses your image");
+    };
+    outliner.onCancel = [this] { closeOutliner(); };
+    outliner.onChooseFile = [this] (int type) { chooseImageFile (type); };
+    addChildComponent (outliner);
+
     // Set last so every child (including slider text boxes) picks up the theme.
     setLookAndFeel (&lookAndFeel);
 
     setResizable (true, true);
-    setResizeLimits (1080, 640, 2400, 1600);
-    setSize (1180, 760);
+    setResizeLimits (1180, 680, 2400, 1600);
+    setSize (1240, 780);
 
     updateTransport();
     lastTimerSeconds = Time::getMillisecondCounterHiRes() * 0.001;
@@ -192,6 +227,8 @@ void ScrapeScapeEditor::resized()
     scatterButton.setBounds (header.removeFromLeft (76));
     header.removeFromLeft (6);
     clearButton.setBounds (header.removeFromLeft (62));
+    header.removeFromLeft (6);
+    presetButton.setBounds (header.removeFromLeft (92));
 
     // Bottom panel: palette + knobs
     auto bottom = area.removeFromBottom (190).reduced (24, 16);
@@ -213,6 +250,7 @@ void ScrapeScapeEditor::resized()
     }
 
     canvas.setBounds (area.reduced (12, 0));
+    outliner.setBounds (getLocalBounds());
 }
 
 //==============================================================================
@@ -223,8 +261,10 @@ void ScrapeScapeEditor::timerCallback()
     lastTimerSeconds = now;
     canvas.repaint();
 
+    const int skinVersion = processor.getSkins().getVersion();
     for (auto* b : paletteButtons)
-        if (b->getToggleState()) b->repaint();
+        if (b->getToggleState() || skinVersion != lastSkinVersion) b->repaint();
+    lastSkinVersion = skinVersion;
 
     updateTransport();
 
@@ -376,4 +416,266 @@ void ScrapeScapeEditor::chooseRenderDestination (double seconds)
                                                                  processor.getEngineParams(), processor.getElements());
                                   updateTransport();
                               });
+}
+
+//==============================================================================
+// Custom images
+//==============================================================================
+int ScrapeScapeEditor::paletteTypeAt (Point<int> p) const
+{
+    for (auto* b : paletteButtons)
+        if (b->getBounds().contains (p))
+            return b->type;
+    return -1;
+}
+
+void ScrapeScapeEditor::setDropHighlight (int type, bool active)
+{
+    for (auto* b : paletteButtons)
+    {
+        const bool on = active && b->type == type;
+        if (b->dropHighlight != on) { b->dropHighlight = on; b->repaint(); }
+    }
+}
+
+static bool isPresetFile (const File& f) { return f.hasFileExtension (ScrapeScapeProcessor::presetExtension); }
+
+bool ScrapeScapeEditor::isInterestedInFileDrag (const StringArray& files)
+{
+    for (auto& path : files)
+    {
+        const File f (path);
+        if (isPresetFile (f) || SkinTools::isSupportedImageFile (f))
+            return true;
+    }
+    return false;
+}
+
+void ScrapeScapeEditor::fileDragEnter (const StringArray& files, int x, int y)
+{
+    dragActive = true;
+    fileDragMove (files, x, y);
+    repaint();
+}
+
+void ScrapeScapeEditor::fileDragMove (const StringArray&, int x, int y)
+{
+    setDropHighlight (paletteTypeAt ({ x, y }), true);
+}
+
+void ScrapeScapeEditor::fileDragExit (const StringArray&)
+{
+    dragActive = false;
+    setDropHighlight (-1, false);
+    repaint();
+}
+
+void ScrapeScapeEditor::filesDropped (const StringArray& files, int x, int y)
+{
+    dragActive = false;
+    setDropHighlight (-1, false);
+    repaint();
+
+    for (auto& path : files)
+    {
+        const File f (path);
+        if (isPresetFile (f)) { loadPresetFile (f); return; }
+    }
+
+    for (auto& path : files)
+    {
+        const File f (path);
+        if (SkinTools::isSupportedImageFile (f))
+        {
+            const int slot = paletteTypeAt ({ x, y });
+            openImageFile (slot >= 0 ? slot : selectedType, f);
+            return;
+        }
+    }
+}
+
+void ScrapeScapeEditor::paintOverChildren (Graphics& g)
+{
+    if (! dragActive) return;
+
+    auto r = canvas.getBounds().toFloat().reduced (8.0f);
+    g.setColour (Colours::black.withAlpha (0.35f));
+    g.fillRoundedRectangle (r, 12.0f);
+    Path border;
+    border.addRoundedRectangle (r, 12.0f);
+    Path dashed;
+    const float dashes[] = { 10.0f, 8.0f };
+    PathStrokeType (2.0f).createDashedStroke (dashed, border, dashes, 2);
+    g.setColour (Colours::white.withAlpha (0.8f));
+    g.fillPath (dashed);
+    g.setFont (FontOptions (18.0f));
+    g.drawFittedText ("Drop an image on a palette slot below to set that element's look\n"
+                      "(or anywhere here to use it for " + String (getElementInfo (selectedType).name) + ").\n"
+                      "Drop a .scapepreset file to load it.",
+                      r.toNearestInt().reduced (30), Justification::centred, 3);
+}
+
+void ScrapeScapeEditor::openImageFile (int type, const File& file)
+{
+    auto img = SkinTools::prepareSource (SkinTools::loadAnyImage (file));
+    if (! img.isValid())
+    {
+        AlertWindow::showMessageBoxAsync (MessageBoxIconType::WarningIcon, "Couldn't open image",
+                                          file.getFileName() + " couldn't be read as an image.");
+        return;
+    }
+
+    ElementSkin skin;
+    skin.source = img;
+    skin.shape = ElementSkin::freehand;
+    openOutliner (type, skin);
+}
+
+void ScrapeScapeEditor::chooseImageFile (int type)
+{
+    fileChooser = std::make_unique<FileChooser> ("Choose an image for " + String (getElementInfo (type).name),
+                                                 File::getSpecialLocation (File::userPicturesDirectory),
+                                                 SkinTools::getImageWildcard());
+    fileChooser->launchAsync (FileBrowserComponent::openMode | FileBrowserComponent::canSelectFiles,
+                              [this, type, safeThis = Component::SafePointer<ScrapeScapeEditor> (this)] (const FileChooser& fc)
+                              {
+                                  if (safeThis == nullptr) return;
+                                  const auto f = fc.getResult();
+                                  if (f.existsAsFile()) openImageFile (type, f);
+                              });
+}
+
+void ScrapeScapeEditor::openOutliner (int type, const ElementSkin& skin)
+{
+    outliner.open (type, skin);
+}
+
+void ScrapeScapeEditor::closeOutliner()
+{
+    outliner.setVisible (false);
+    for (auto* b : paletteButtons) b->repaint();
+}
+
+void ScrapeScapeEditor::showPaletteMenu (int type)
+{
+    auto& skins = processor.getSkins();
+    const bool has = skins.hasSkin (type);
+    const auto name = String (getElementInfo (type).name);
+
+    PopupMenu menu;
+    menu.addSectionHeader (name);
+    menu.addItem (1, "Use an image for " + name + "...");
+    menu.addItem (2, "Re-outline image...", has);
+    menu.addItem (3, "Back to built-in " + name + " icon", has);
+    menu.addSeparator();
+    menu.addItem (4, "Reset all elements to built-in icons");
+
+    auto* button = paletteButtons[type];
+    menu.showMenuAsync (PopupMenu::Options().withTargetComponent (button),
+                        [this, type, safeThis = Component::SafePointer<ScrapeScapeEditor> (this)] (int result)
+                        {
+                            if (safeThis == nullptr) return;
+                            auto& sk = processor.getSkins();
+                            switch (result)
+                            {
+                                case 1: chooseImageFile (type); break;
+                                case 2: openOutliner (type, sk.get (type)); break;
+                                case 3: sk.reset (type); break;
+                                case 4: sk.resetAll(); break;
+                                default: break;
+                            }
+                        });
+}
+
+//==============================================================================
+// Presets
+//==============================================================================
+void ScrapeScapeEditor::showPresetMenu()
+{
+    PopupMenu menu;
+    menu.addSectionHeader ("Current: " + processor.getCurrentPresetName());
+    menu.addItem (1, "Save preset...");
+    menu.addItem (2, "Load preset from file...");
+    menu.addItem (3, "Show presets folder");
+
+    PopupMenu factory;
+    const auto factoryNames = ScrapeScapeProcessor::getFactoryPresetNames();
+    for (int i = 0; i < factoryNames.size(); ++i)
+        factory.addItem (100 + i, factoryNames[i]);
+    menu.addSeparator();
+    menu.addSubMenu ("Factory scenes (keep your images)", factory);
+
+    const auto userPresets = ScrapeScapeProcessor::getPresetsFolder()
+                                 .findChildFiles (File::findFiles, false, String ("*") + ScrapeScapeProcessor::presetExtension);
+    auto sorted = userPresets;
+    std::sort (sorted.begin(), sorted.end(), [] (const File& a, const File& b)
+               { return a.getFileName().compareNatural (b.getFileName()) < 0; });
+
+    if (! sorted.isEmpty())
+    {
+        menu.addSeparator();
+        menu.addSectionHeader ("My presets");
+        for (int i = 0; i < sorted.size(); ++i)
+            menu.addItem (1000 + i, sorted[i].getFileNameWithoutExtension());
+    }
+
+    menu.showMenuAsync (PopupMenu::Options().withTargetComponent (&presetButton),
+                        [this, sorted, safeThis = Component::SafePointer<ScrapeScapeEditor> (this)] (int result)
+                        {
+                            if (safeThis == nullptr || result == 0) return;
+                            if (result == 1) savePresetAs();
+                            else if (result == 2) loadPresetFromChooser();
+                            else if (result == 3) ScrapeScapeProcessor::getPresetsFolder().startAsProcess();
+                            else if (result >= 1000) loadPresetFile (sorted[result - 1000]);
+                            else if (result >= 100)
+                            {
+                                processor.loadFactoryPreset (result - 100);
+                                canvas.flash ("Loaded " + processor.getCurrentPresetName());
+                            }
+                        });
+}
+
+void ScrapeScapeEditor::savePresetAs()
+{
+    auto name = processor.getCurrentPresetName();
+    if (name.isEmpty() || name == "Default") name = "My Scene";
+    const auto start = ScrapeScapeProcessor::getPresetsFolder().getChildFile (File::createLegalFileName (name)
+                                                                               + ScrapeScapeProcessor::presetExtension);
+    fileChooser = std::make_unique<FileChooser> ("Save preset", start, String ("*") + ScrapeScapeProcessor::presetExtension);
+    fileChooser->launchAsync (FileBrowserComponent::saveMode | FileBrowserComponent::canSelectFiles
+                                  | FileBrowserComponent::warnAboutOverwriting,
+                              [this, safeThis = Component::SafePointer<ScrapeScapeEditor> (this)] (const FileChooser& fc)
+                              {
+                                  if (safeThis == nullptr) return;
+                                  auto f = fc.getResult();
+                                  if (f == File()) return;
+                                  f = f.withFileExtension (ScrapeScapeProcessor::presetExtension);
+                                  if (processor.savePreset (f))
+                                      canvas.flash ("Saved preset " + f.getFileNameWithoutExtension());
+                                  else
+                                      AlertWindow::showMessageBoxAsync (MessageBoxIconType::WarningIcon, "Couldn't save preset",
+                                                                        "Couldn't write " + f.getFullPathName());
+                              });
+}
+
+void ScrapeScapeEditor::loadPresetFromChooser()
+{
+    fileChooser = std::make_unique<FileChooser> ("Load preset", ScrapeScapeProcessor::getPresetsFolder(),
+                                                 String ("*") + ScrapeScapeProcessor::presetExtension);
+    fileChooser->launchAsync (FileBrowserComponent::openMode | FileBrowserComponent::canSelectFiles,
+                              [this, safeThis = Component::SafePointer<ScrapeScapeEditor> (this)] (const FileChooser& fc)
+                              {
+                                  if (safeThis == nullptr) return;
+                                  const auto f = fc.getResult();
+                                  if (f.existsAsFile()) loadPresetFile (f);
+                              });
+}
+
+void ScrapeScapeEditor::loadPresetFile (const File& file)
+{
+    if (processor.loadPreset (file))
+        canvas.flash ("Loaded preset " + file.getFileNameWithoutExtension());
+    else
+        AlertWindow::showMessageBoxAsync (MessageBoxIconType::WarningIcon, "Couldn't load preset",
+                                          file.getFileName() + " isn't a Scrape-Scape preset.");
 }
