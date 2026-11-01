@@ -51,6 +51,10 @@ public:
     int getLfoTarget (int index) const noexcept;
     void setLfoTarget (int index, int target);
     static juce::String getTargetParamID (int target);
+    static juce::String voiceParamID (int type, int index)
+    {
+        return juce::String (scape::getElementInfo (type).name).toLowerCase() + "_" + scape::getVoiceParamSpec (type, index).id;
+    }
     static juce::String lfoParamID (int index, const char* suffix) { return "lfo" + juce::String (index + 1) + "_" + suffix; }
 
     // Transport: Stop fades the music out and pauses the engine; Play fades it back in.
@@ -123,6 +127,7 @@ private:
     struct LfoParamPtrs { std::atomic<float>* shape = nullptr; std::atomic<float>* rate = nullptr;
                           std::atomic<float>* depth = nullptr; std::atomic<float>* target = nullptr; };
     std::array<LfoParamPtrs, scape::kNumLfos> lfoParams;
+    std::array<std::array<std::atomic<float>*, scape::kVoiceParams>, scape::kNumSoundTypes> voiceParams {};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ScrapeScapeProcessor)
 };

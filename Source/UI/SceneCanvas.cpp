@@ -219,6 +219,28 @@ void SceneCanvas::advanceAnimation (float seconds)
     const bool stopped = isPlaying && ! isPlaying();
     stoppedDim = jlimit (0.0f, 1.0f, stoppedDim + (stopped ? seconds / 1.5f : -seconds / 0.8f));
 
+    // Feed the visual field with where everything is and how active it sounds.
+    if (getVisualContext)
+    {
+        std::vector<ElementVisual> list;
+        for (int i = 0; i < kMaxElements; ++i)
+        {
+            const auto e = bank.get (i);
+            if (! e.active) continue;
+            ElementVisual v;
+            v.index = i;
+            v.type = e.type;
+            v.pos = toScreen (e.x, e.y);
+            v.radius = radiusFor (e.type, e.size) * e.scale;
+            v.size = e.size;
+            v.activity = bank.slot (i).activity.load();
+            v.seed = e.seed;
+            list.push_back (v);
+        }
+        field.setBounds (getWidth(), getHeight());
+        field.update (seconds, list, getVisualContext());
+    }
+
     // Ease the background towards the current mood's colours.
     const auto& mood = getMood (getMoodIndex ? getMoodIndex() : 0);
     const float k = jmin (1.0f, seconds * 1.5f);
@@ -313,6 +335,14 @@ void SceneCanvas::paint (Graphics& g)
         g.fillPath (dashed);
     }
 
+    {
+        Graphics::ScopedSaveState clip (g);
+        Path rounded;
+        rounded.addRoundedRectangle (getLocalBounds().toFloat(), 12.0f);
+        g.reduceClipRegion (rounded);
+        field.paintBehind (g);
+    }
+
     const bool padMode = isPadMode && isPadMode();
     const float physicalScale = g.getInternalContext().getPhysicalPixelScaleFactor();
     if (padMode) g.beginTransparencyLayer (0.4f);
@@ -350,6 +380,7 @@ void SceneCanvas::paint (Graphics& g)
     }
 
     if (padMode) g.endTransparencyLayer();
+    field.paintFront (g);
     paintPad (g);
 
     // Footer hints and status.
@@ -442,6 +473,7 @@ void SceneCanvas::mouseDown (const MouseEvent& e)
         dragIndex = hit;
         selectedIndex = hit;
         const auto el = bank.get (hit);
+        if (onElementSelected) onElementSelected (el.type);
         dragOffset = toScreen (el.x, el.y) - p;
     }
     else
@@ -450,6 +482,7 @@ void SceneCanvas::mouseDown (const MouseEvent& e)
         const auto n = toNormalised (p);
         dragIndex = bank.add ((ElementType) type, n.x, n.y, 1.0f);
         selectedIndex = dragIndex;
+        if (dragIndex >= 0 && onElementSelected) onElementSelected (type);
         dragOffset = {};
 
         if (dragIndex < 0)

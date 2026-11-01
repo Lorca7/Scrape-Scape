@@ -24,6 +24,12 @@ void SoundChain::prepare (double sampleRate)
 
 float SoundChain::toNorm (const ChainParams& p, int target) noexcept
 {
+    if (isVoiceTarget (target))
+    {
+        const int k = target - kFirstVoiceTarget;
+        return p.engine.voice[(size_t) (k / kVoiceParams)][(size_t) (k % kVoiceParams)];
+    }
+
     switch ((ModTarget) target)
     {
         case ModTarget::PadX:         return p.pad.x;
@@ -39,7 +45,7 @@ float SoundChain::toNorm (const ChainParams& p, int target) noexcept
         case ModTarget::Brightness:   return p.engine.brightness;
         case ModTarget::Activity:     return p.engine.activity;
         case ModTarget::None:
-        case ModTarget::NumTargets:   break;
+        case ModTarget::FirstVoiceTarget: break;
     }
     return 0.0f;
 }
@@ -47,6 +53,13 @@ float SoundChain::toNorm (const ChainParams& p, int target) noexcept
 void SoundChain::setFromNorm (ChainParams& p, int target, float n) noexcept
 {
     n = std::clamp (n, 0.0f, 1.0f);
+    if (isVoiceTarget (target))
+    {
+        const int k = target - kFirstVoiceTarget;
+        p.engine.voice[(size_t) (k / kVoiceParams)][(size_t) (k % kVoiceParams)] = n;
+        return;
+    }
+
     switch ((ModTarget) target)
     {
         case ModTarget::PadX:         p.pad.x = n; break;
@@ -62,7 +75,7 @@ void SoundChain::setFromNorm (ChainParams& p, int target, float n) noexcept
         case ModTarget::Brightness:   p.engine.brightness = n; break;
         case ModTarget::Activity:     p.engine.activity = n; break;
         case ModTarget::None:
-        case ModTarget::NumTargets:   break;
+        case ModTarget::FirstVoiceTarget: break;
     }
 }
 

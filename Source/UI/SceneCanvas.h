@@ -3,6 +3,7 @@
 #include "Engine/Elements.h"
 #include "Engine/Moods.h"
 #include "Skins.h"
+#include "VisualField.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -36,6 +37,11 @@ public:
     std::function<void (bool starting)> onPadGesture;
     std::function<void (int lfo, int target)> onLfoDropped;
 
+    // Sound-reactive visuals + selection
+    std::function<VisualContext()> getVisualContext;
+    std::function<void (int type)> onElementSelected;
+    int getVisualParticleCount() const noexcept { return field.getParticleCount(); }
+
     bool isInterestedInDragSource (const SourceDetails&) override;
     void itemDragEnter (const SourceDetails&) override;
     void itemDragExit (const SourceDetails&) override;
@@ -67,6 +73,7 @@ private:
     float resizeStartScale = 1.0f, resizeStartDistance = 1.0f;
     bool padDragging = false, lfoDragHover = false;
     GlyphCache glyphCache;
+    VisualField field;
     juce::Point<float> dragOffset;
     float time = 0.0f;
     juce::Colour topColour, bottomColour;

@@ -76,6 +76,47 @@ element has its own random seed, so no two placements behave the same way.
 
 **Knobs:** Activity, Brightness, Tempo, Reverb, Echo and Volume. All of them can be automated in a DAW.
 
+## Sound controls per engine
+
+The **Sounds** tab in the right sidebar gives every engine its own page. Pick an engine from the
+icon row, or just click an element on the canvas or a palette slot. Each page has 8 knobs that apply
+to every element of that type:
+
+| Engine | Shared | Own controls |
+|---|---|---|
+| Drone | Level, Tone, Space (reverb send), Echo (echo send) | Detune, Breath, Sub, Glide |
+| Bell | " | Decay, Metal (FM ratio), Density, Octave |
+| Pluck | " | Decay, Density, Speed, Octave |
+| Bass | " | Drive, Attack, Walk, Octave |
+| Shimmer | " | Rate, Length, Spread, Octave |
+| Wind | " | Resonance, Air, Gusts, Octave |
+| Pulse | " | Decay, Density, Pattern (hits per bar), Octave |
+
+All 56 controls can be automated in a DAW and saved in presets. **Drag any LFO onto any of these
+knobs** to animate it. The LFO target menu also lists them, grouped by engine.
+
+## Living visuals
+
+While the music plays, the canvas visualises it:
+
+- **Particles** stream from every sounding element: slow spirals from Drones, sparks from Bells,
+  streaks from Plucks, soft blobs from Bass, glitter from Shimmer, flowing currents from Wind.
+  They're pulled into **orbits around other elements** and **take on the colours** of what they
+  pass near, so new colours and patterns emerge where sounds meet.
+- **Ripples** spread from struck sounds (circles for Bells and Bass, bursts for Plucks, squares for
+  Pulse). **Where ripples from different elements cross, sparks appear**, an interference pattern
+  that keeps changing.
+- **Threads** link neighbouring elements and vibrate with their combined activity.
+- **Drones trace rotating rose curves** that build into spirographs. The number of petals follows
+  the current chord.
+- **Shade** zones slow particles and tint them violet. **Spark** zones speed them up and brighten them.
+
+The visuals follow the controls, including whatever the LFOs are doing at that moment. Tone shifts an
+engine's hue, Level sets how much it emits, Space and Echo make ripples last longer and repeat,
+Reverb lengthens the trails, Brightness changes colour intensity and Granular breaks particles into
+fragments. On the XY pad, **Wash/Dub Echo** stretch the trails, **Crush** pixelates the particles
+and **Warble** makes them wobble. The **Visuals** knob sets the overall intensity (0 = off).
+
 ## XY effects pad
 
 The strip under the canvas is an effects matrix. Choose an effect, raise **Dry/Wet**, then turn on
@@ -145,7 +186,8 @@ inside your presets and DAW projects, so they travel with them.
 ## Presets
 
 **Presets ▾** saves and loads *everything*: the elements, their positions and picture sizes, mood,
-all knobs, XY pad, granular and LFO settings, and your custom images.
+all knobs (including every engine's sound controls), XY pad, granular and LFO settings, and your
+custom images.
 
 - **Save preset...** writes a `.scapepreset` file (by default to `~/Music/Scrape-Scape/Presets/`).
   Saved presets appear in the menu under **My presets**.

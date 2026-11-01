@@ -111,16 +111,35 @@ void LfoPanel::showTargetMenu (int lfo)
     PopupMenu menu;
     menu.addSectionHeader ("LFO " + String (lfo + 1) + " modulates...");
     const int current = getLfoTarget ? getLfoTarget (lfo) : 0;
-    for (int t = 1; t < kNumModTargets; ++t)
-        menu.addItem (t, getModTargetName (t), true, t == current);
+    PopupMenu global, pad, grain;
+    for (int t : { (int) ModTarget::Activity, (int) ModTarget::Brightness, (int) ModTarget::Reverb, (int) ModTarget::Echo })
+        global.addItem (t, getModTargetName (t), true, t == current);
+    for (int t : { (int) ModTarget::PadX, (int) ModTarget::PadY, (int) ModTarget::FxMix })
+        pad.addItem (t, getModTargetName (t), true, t == current);
+    for (int t = (int) ModTarget::GrainMix; t <= (int) ModTarget::GrainSpray; ++t)
+        grain.addItem (t, getModTargetName (t), true, t == current);
+    menu.addSubMenu ("Global", global);
+    menu.addSubMenu ("XY effects pad", pad);
+    menu.addSubMenu ("Granular", grain);
     menu.addSeparator();
-    menu.addItem (1000, "Nothing (clear)", current != 0);
+    for (int type = 0; type < kNumSoundTypes; ++type)
+    {
+        PopupMenu sub;
+        for (int k = 0; k < kVoiceParams; ++k)
+        {
+            const int t = voiceTarget (type, k);
+            sub.addItem (t, getVoiceParamSpec (type, k).name, true, t == current);
+        }
+        menu.addSubMenu (getElementInfo (type).name, sub, true, Image(), current >= voiceTarget (type, 0) && current <= voiceTarget (type, kVoiceParams - 1));
+    }
+    menu.addSeparator();
+    menu.addItem (100000, "Nothing (clear)", current != 0);
 
     menu.showMenuAsync (PopupMenu::Options().withTargetComponent (&rows[(size_t) lfo].targetButton),
                         [this, lfo, safe = Component::SafePointer<LfoPanel> (this)] (int result)
                         {
                             if (safe == nullptr || result == 0 || ! setLfoTarget) return;
-                            setLfoTarget (lfo, result == 1000 ? 0 : result);
+                            setLfoTarget (lfo, result == 100000 ? 0 : result);
                             refresh();
                         });
 }

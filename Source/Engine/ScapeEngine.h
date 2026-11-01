@@ -4,6 +4,7 @@
 #include "Elements.h"
 #include "Moods.h"
 #include "Voice.h"
+#include "VoiceParams.h"
 
 #include <array>
 #include <atomic>
@@ -21,6 +22,7 @@ struct EngineParams
     float reverb = 0.5f;       // 0..1
     float delay = 0.3f;        // 0..1
     float volumeDb = -3.0f;
+    AllVoiceParams voice = defaultVoiceParams();   // per-engine sound controls (0..1)
 };
 
 // The whole generative instrument: a conductor (clock + chord progression), one voice

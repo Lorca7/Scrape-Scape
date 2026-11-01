@@ -43,6 +43,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout ScrapeScapeProcessor::create
                                                        NormalisableRange<float> (-40.0f, 6.0f, 0.1f), 0.0f,
                                                        AudioParameterFloatAttributes().withLabel ("dB").withStringFromValueFunction (
                                                            [] (float v, int) { return String (v, 1) + " dB"; })));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "visuals", 1 }, "Visuals",
+                                                       NormalisableRange<float> (0.0f, 1.0f), 0.8f, percent));
+
     // ---- XY effects pad ----
     StringArray fxNames;
     for (int i = 0; i < kNumPadEffects; ++i)
@@ -71,6 +74,28 @@ juce::AudioProcessorValueTreeState::ParameterLayout ScrapeScapeProcessor::create
         AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return (v > 0 ? "+" : "") + String (roundToInt (v)) + " st"; })));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "grain_spray", 1 }, "Grain Spray", NormalisableRange<float> (0.0f, 1.0f), 0.3f, percent));
 
+    // ---- Per-engine sound controls ----
+    for (int t = 0; t < kNumSoundTypes; ++t)
+        for (int k = 0; k < kVoiceParams; ++k)
+        {
+            const auto& spec = getVoiceParamSpec (t, k);
+            auto display = [d = spec.display] (float v, int) -> String
+            {
+                switch (d)
+                {
+                    case VoiceParamDisplay::octave: { const int o = octaveFrom (v); return o == 0 ? String ("0 oct") : (o > 0 ? "+" : "") + String (o) + " oct"; }
+                    case VoiceParamDisplay::ratio:  return String (fmRatioFrom (v), 2) + ":1";
+                    case VoiceParamDisplay::hits:   return String (pulseHitsFrom (v)) + " hits";
+                    case VoiceParamDisplay::percent: break;
+                }
+                return String (roundToInt (v * 100.0f)) + "%";
+            };
+            layout.add (std::make_unique<AudioParameterFloat> (ParameterID { voiceParamID (t, k), 1 },
+                                                               String (getElementInfo (t).name) + " " + spec.name,
+                                                               NormalisableRange<float> (0.0f, 1.0f), spec.defaultValue,
+                                                               AudioParameterFloatAttributes().withStringFromValueFunction (display)));
+        }
+
     // ---- LFOs ----
     StringArray shapes, targets;
     for (int i = 0; i < kNumLfoShapes; ++i) shapes.add (getLfoShapeName (i));
@@ -95,6 +120,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout ScrapeScapeProcessor::create
 
 juce::String ScrapeScapeProcessor::getTargetParamID (int target)
 {
+    if (isVoiceTarget (target))
+    {
+        const int k = target - kFirstVoiceTarget;
+        return voiceParamID (k / kVoiceParams, k % kVoiceParams);
+    }
+
     switch ((ModTarget) target)
     {
         case ModTarget::PadX:         return "fx_x";
@@ -110,7 +141,7 @@ juce::String ScrapeScapeProcessor::getTargetParamID (int target)
         case ModTarget::Brightness:   return ParamIDs::brightness;
         case ModTarget::Activity:     return ParamIDs::activity;
         case ModTarget::None:
-        case ModTarget::NumTargets:   break;
+        case ModTarget::FirstVoiceTarget: break;
     }
     return {};
 }
@@ -150,6 +181,10 @@ ScrapeScapeProcessor::ScrapeScapeProcessor()
     grainDensityParam = parameters.getRawParameterValue ("grain_density");
     grainPitchParam = parameters.getRawParameterValue ("grain_pitch");
     grainSprayParam = parameters.getRawParameterValue ("grain_spray");
+    for (int t = 0; t < kNumSoundTypes; ++t)
+        for (int k = 0; k < kVoiceParams; ++k)
+            voiceParams[(size_t) t][(size_t) k] = parameters.getRawParameterValue (voiceParamID (t, k));
+
     for (int i = 0; i < kNumLfos; ++i)
     {
         auto& l = lfoParams[(size_t) i];
@@ -207,6 +242,9 @@ EngineParams ScrapeScapeProcessor::getEngineParams() const noexcept
     p.reverb = reverbParam->load();
     p.delay = delayParam->load();
     p.volumeDb = volumeParam->load();
+    for (int t = 0; t < kNumSoundTypes; ++t)
+        for (int k = 0; k < kVoiceParams; ++k)
+            p.voice[(size_t) t][(size_t) k] = voiceParams[(size_t) t][(size_t) k]->load();
     return p;
 }
 

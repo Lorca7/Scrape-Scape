@@ -4,6 +4,7 @@
 #include "UI/ImageOutliner.h"
 #include "UI/LfoPanel.h"
 #include "UI/ModKnob.h"
+#include "UI/SoundPage.h"
 #include "UI/SceneCanvas.h"
 #include "UI/ScapeLookAndFeel.h"
 
@@ -44,7 +45,10 @@ private:
     };
 
     std::unique_ptr<ModKnob> makeKnob (const juce::String& paramID, const juce::String& name, juce::Colour colour,
-                                       scape::ModTarget target, ModKnob::LabelPosition pos);
+                                       scape::ModTarget target, ModKnob::LabelPosition pos,
+                                       juce::Component* parent = nullptr);
+    void showSidebarPage (bool sounds);
+    VisualContext buildVisualContext() const;
     void assignLfo (int lfo, int target);
     void setParam (const juce::String& id, float value);
     bool showSubtitle() const noexcept { return getWidth() >= 1500; }
@@ -83,7 +87,7 @@ private:
     juce::TextButton renderButton { "Render WAV..." }, takesButton { "Takes" };
     juce::Label timeLabel;
 
-    std::unique_ptr<ModKnob> activity, brightness, tempo, reverb, echo, volume;
+    std::unique_ptr<ModKnob> activity, brightness, tempo, reverb, echo, volume, visuals;
 
     // XY effects pad bar (under the canvas)
     juce::TextButton padModeButton;
@@ -93,6 +97,8 @@ private:
     // Granular section + LFOs (right sidebar)
     std::unique_ptr<ModKnob> grainMix, grainSize, grainDensity, grainPitch, grainSpray;
     LfoPanel lfoPanel;
+    SoundPage soundPage;
+    juce::TextButton soundsTab { "Sounds" }, grainTab { "Granular" };
     juce::Rectangle<int> sidebarArea, fxBarArea;
 
     ImageOutliner outliner;

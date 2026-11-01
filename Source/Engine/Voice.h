@@ -3,6 +3,7 @@
 #include "Dsp.h"
 #include "Elements.h"
 #include "Moods.h"
+#include "VoiceParams.h"
 
 #include <array>
 
@@ -42,7 +43,7 @@ class Voice
 public:
     void prepare (float sampleRate);
     void begin (const ElementSnapshot& e);
-    void update (const ElementSnapshot& e, const VoiceMods& mods) noexcept;
+    void update (const ElementSnapshot& e, const VoiceMods& mods, const VoiceParamArray& params) noexcept;
     void onTick (const VoiceContext& ctx) noexcept;
     void render (const VoiceBuses& buses, int start, int numSamples, const VoiceContext& ctx) noexcept;
 
@@ -99,6 +100,8 @@ private:
     bool active = false, sounding = false, needsInitialPitch = true;
     float x = 0.5f, y = 0.5f, size = 1.0f;
     VoiceMods mods;
+    VoiceParamArray vp = defaultVoiceParams()[0];
+    int lastPulseHits = -1;
     dsp::Rng rng;
     dsp::OnePole fade, levelSmooth, panSmooth;
     float fadeInCoeff = 0, fadeOutCoeff = 0;

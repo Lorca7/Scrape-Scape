@@ -1,6 +1,10 @@
 #pragma once
 
 #include "Dsp.h"
+#include "Elements.h"
+#include "VoiceParams.h"
+
+#include <string>
 
 #include <cmath>
 
@@ -14,20 +18,31 @@ enum class ModTarget : int
     PadX, PadY, FxMix,
     GrainMix, GrainSize, GrainDensity, GrainPitch, GrainSpray,
     Reverb, Echo, Brightness, Activity,
-    NumTargets
+    FirstVoiceTarget   // followed by kNumSoundTypes * kVoiceParams per-engine targets
 };
 
-constexpr int kNumModTargets = (int) ModTarget::NumTargets;
+constexpr int kFirstVoiceTarget = (int) ModTarget::FirstVoiceTarget;
+constexpr int kNumModTargets = kFirstVoiceTarget + kNumSoundTypes * kVoiceParams;
+
+inline int voiceTarget (int type, int index) noexcept { return kFirstVoiceTarget + type * kVoiceParams + index; }
+inline bool isVoiceTarget (int t) noexcept            { return t >= kFirstVoiceTarget && t < kNumModTargets; }
 constexpr int kNumLfos = 4;
 
 inline const char* getModTargetName (int t) noexcept
 {
-    static const char* names[kNumModTargets] = {
-        "None", "Pad X", "Pad Y", "FX Dry/Wet",
-        "Grain Dry/Wet", "Grain Size", "Grain Density", "Grain Pitch", "Grain Spray",
-        "Reverb", "Echo", "Brightness", "Activity"
-    };
-    return names[t < 0 || t >= kNumModTargets ? 0 : t];
+    static const auto names = []
+    {
+        std::array<std::string, (size_t) kNumModTargets> n;
+        const char* fixed[] = { "None", "Pad X", "Pad Y", "FX Dry/Wet",
+                                "Grain Dry/Wet", "Grain Size", "Grain Density", "Grain Pitch", "Grain Spray",
+                                "Reverb", "Echo", "Brightness", "Activity" };
+        for (int i = 0; i < kFirstVoiceTarget; ++i) n[(size_t) i] = fixed[i];
+        for (int type = 0; type < kNumSoundTypes; ++type)
+            for (int k = 0; k < kVoiceParams; ++k)
+                n[(size_t) voiceTarget (type, k)] = std::string (getElementInfo (type).name) + " " + getVoiceParamSpec (type, k).name;
+        return n;
+    }();
+    return names[(size_t) (t < 0 || t >= kNumModTargets ? 0 : t)].c_str();
 }
 
 enum class LfoShape : int { Sine = 0, Triangle, Saw, Square, SampleHold, Drift, NumShapes };

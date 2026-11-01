@@ -54,7 +54,7 @@ void ScrapeScapeEditor::ElementButton::paintButton (Graphics& g, bool over, bool
 
 //==============================================================================
 ScrapeScapeEditor::ScrapeScapeEditor (ScrapeScapeProcessor& p)
-    : AudioProcessorEditor (&p), processor (p), canvas (p.getElements(), p.getSkins()), lfoPanel (p.getParameters())
+    : AudioProcessorEditor (&p), processor (p), canvas (p.getElements(), p.getSkins()), lfoPanel (p.getParameters()), soundPage (p.getSkins())
 {
 
     canvas.getSelectedType = [this] { return selectedType; };
@@ -66,7 +66,12 @@ ScrapeScapeEditor::ScrapeScapeEditor (ScrapeScapeProcessor& p)
     for (int t = 0; t < kNumElementTypes; ++t)
     {
         auto* b = paletteButtons.add (new ElementButton (t, processor.getSkins()));
-        b->onClick = [this, b] { if (b->getToggleState()) selectedType = b->type; };
+        b->onClick = [this, b]
+        {
+            if (! b->getToggleState()) return;
+            selectedType = b->type;
+            if (b->type < kNumSoundTypes) { soundPage.selectType (b->type); showSidebarPage (true); }
+        };
         b->onMenuRequested = [this, t] { showPaletteMenu (t); };
         addAndMakeVisible (b);
     }
@@ -124,6 +129,8 @@ ScrapeScapeEditor::ScrapeScapeEditor (ScrapeScapeProcessor& p)
     reverb     = makeKnob ("reverb",     "Reverb",     Colour (0xff7fb8ff), ModTarget::Reverb,     LP::left);
     echo       = makeKnob ("delay",      "Echo",       Colour (0xff8fd6d6), ModTarget::Echo,       LP::left);
     volume     = makeKnob ("volume",     "Volume",     Colour (0xffe8ecf5), ModTarget::None,       LP::left);
+    visuals    = makeKnob ("visuals",    "Visuals",    Colour (0xffc9a7ff), ModTarget::None,       LP::left);
+    visuals->slider.setTooltip ("How strongly the canvas visualises the sound (particles, ripples, threads, trails)");
 
     // ---- XY effects pad bar ----
     padModeButton.setButtonText ("XY Pad");
@@ -158,6 +165,34 @@ ScrapeScapeEditor::ScrapeScapeEditor (ScrapeScapeProcessor& p)
     grainDensity = makeKnob ("grain_density", "Density", Colour (0xffe6f7ff), ModTarget::GrainDensity, LP::above);
     grainPitch   = makeKnob ("grain_pitch",   "Pitch",   Colour (0xffe6f7ff), ModTarget::GrainPitch,   LP::above);
     grainSpray   = makeKnob ("grain_spray",   "Spray",   Colour (0xffe6f7ff), ModTarget::GrainSpray,   LP::above);
+
+    // ---- Per-engine sound page ----
+    soundPage.build ([this] (const String& id, const String& name, Colour colour, int target, Component* parent)
+                     { return makeKnob (id, name, colour, (ModTarget) target, ModKnob::LabelPosition::above, parent); },
+                     [] (int type, int index) { return ScrapeScapeProcessor::voiceParamID (type, index); });
+    addAndMakeVisible (soundPage);
+
+    for (auto* tab : { &soundsTab, &grainTab })
+    {
+        tab->setRadioGroupId (5001);
+        tab->setClickingTogglesState (true);
+        tab->setColour (TextButton::buttonOnColourId, ScapeColours::panelEdge.brighter (0.2f));
+        addAndMakeVisible (tab);
+    }
+    soundsTab.setTooltip ("Sound controls for each engine (drag LFOs onto any knob)");
+    grainTab.setTooltip ("Granular effect on everything that's playing");
+    soundsTab.onClick = [this] { showSidebarPage (true); };
+    grainTab.onClick = [this] { showSidebarPage (false); };
+
+    canvas.onElementSelected = [this] (int type)
+    {
+        if (type < kNumSoundTypes)
+        {
+            soundPage.selectType (type);
+            showSidebarPage (true);
+        }
+    };
+    canvas.getVisualContext = [this] { return buildVisualContext(); };
 
     // ---- LFOs ----
     lfoPanel.getLfoValue = [this] (int i) { return processor.getLfoValue (i); };
@@ -206,6 +241,8 @@ ScrapeScapeEditor::ScrapeScapeEditor (ScrapeScapeProcessor& p)
     outliner.onChooseFile = [this] (int type) { chooseImageFile (type); };
     addChildComponent (outliner);
 
+    showSidebarPage (true);
+
     // Set last so every child (including slider text boxes) picks up the theme.
     setLookAndFeel (&lookAndFeel);
 
@@ -227,14 +264,53 @@ ScrapeScapeEditor::~ScrapeScapeEditor()
 }
 
 std::unique_ptr<ModKnob> ScrapeScapeEditor::makeKnob (const String& paramID, const String& name, Colour colour,
-                                                      ModTarget target, ModKnob::LabelPosition pos)
+                                                      ModTarget target, ModKnob::LabelPosition pos, Component* parent)
 {
     auto k = std::make_unique<ModKnob> (processor.getParameters(), paramID, name, colour, (int) target, pos);
     k->getModulatedValue = [this] (int t) { return processor.getModulatedValue (t); };
     k->getLfoTarget = [this] (int lfo) { return processor.getLfoTarget (lfo); };
     k->onLfoDropped = [this] (int lfo, int t) { assignLfo (lfo, t); };
-    addAndMakeVisible (*k);
+    (parent != nullptr ? parent : static_cast<Component*> (this))->addAndMakeVisible (*k);
     return k;
+}
+
+void ScrapeScapeEditor::showSidebarPage (bool sounds)
+{
+    soundsTab.setToggleState (sounds, dontSendNotification);
+    grainTab.setToggleState (! sounds, dontSendNotification);
+    soundPage.setVisible (sounds);
+    for (auto* k : { grainMix.get(), grainSize.get(), grainDensity.get(), grainPitch.get(), grainSpray.get() })
+        if (k != nullptr) k->setVisible (! sounds);
+    repaint (sidebarArea);
+}
+
+VisualContext ScrapeScapeEditor::buildVisualContext() const
+{
+    // Start from the knob values, then apply whatever the LFOs are doing right now,
+    // so the visuals move with the modulation too.
+    auto c = processor.getChainParams();
+    for (int t = 1; t < kNumModTargets; ++t)
+    {
+        const float m = processor.getModulatedValue (t);
+        if (m >= 0.0f) SoundChain::setFromNorm (c, t, m);
+    }
+
+    VisualContext v;
+    v.brightness = c.engine.brightness;
+    v.activity = c.engine.activity;
+    v.reverb = c.engine.reverb;
+    v.echo = c.engine.delay;
+    v.fxType = c.pad.type;
+    v.fxMix = c.pad.mix;
+    v.fxX = c.pad.x;
+    v.fxY = c.pad.y;
+    v.grainMix = c.grain.mix;
+    v.chordRoot = processor.getChordRoot();
+    v.voice = c.engine.voice;
+    v.playing = processor.isPlaying();
+    if (auto* vis = processor.getParameters().getRawParameterValue ("visuals"))
+        v.amount = vis->load();
+    return v;
 }
 
 void ScrapeScapeEditor::assignLfo (int lfo, int target)
@@ -286,14 +362,12 @@ void ScrapeScapeEditor::paint (Graphics& g)
         g.setColour (ScapeColours::panelEdge.withAlpha (0.6f));
         g.drawRoundedRectangle (r.toFloat(), 12.0f, 1.0f);
     }
-    if (! sidebarArea.isEmpty())
+    if (! sidebarArea.isEmpty() && grainTab.getToggleState())
     {
         g.setColour (ScapeColours::textDim);
-        g.setFont (FontOptions (12.0f, Font::bold));
-        g.drawText ("GRANULAR", sidebarArea.reduced (14, 10).removeFromTop (16), Justification::centredLeft);
         g.setFont (FontOptions (11.0f));
-        g.drawText ("grains from everything that's playing", sidebarArea.reduced (14, 10).removeFromTop (16),
-                    Justification::centredRight);
+        g.drawText ("Grains cut from everything that's playing", grainMix->getBounds().getUnion (grainSpray->getBounds())
+                        .translated (0, -26).withHeight (18), Justification::centred);
     }
 
     if (processor.isRecording())
@@ -342,22 +416,28 @@ void ScrapeScapeEditor::resized()
         b->setBounds (palette.removeFromLeft (buttonW).reduced (3, 0));
 
     bottom.removeFromTop (8);
-    ModKnob* knobs[] = { activity.get(), brightness.get(), tempo.get(), reverb.get(), echo.get(), volume.get() };
-    const int knobW = bottom.getWidth() / 6;
+    ModKnob* knobs[] = { activity.get(), brightness.get(), tempo.get(), reverb.get(), echo.get(), volume.get(), visuals.get() };
+    const int knobW = bottom.getWidth() / 7;
     for (auto* k : knobs)
         k->setBounds (bottom.removeFromLeft (knobW));
 
     // Right sidebar: granular + LFOs
     sidebarArea = area.removeFromRight (310).withTrimmedRight (12).withTrimmedBottom (2);
     {
-        auto side = sidebarArea.reduced (14, 10);
-        side.removeFromTop (20);
-        auto grainRow = side.removeFromTop (84);
+        auto side = sidebarArea.reduced (12, 10);
+        auto tabs = side.removeFromTop (28);
+        soundsTab.setBounds (tabs.removeFromLeft (tabs.getWidth() / 2).reduced (2, 0));
+        grainTab.setBounds (tabs.reduced (2, 0));
+        side.removeFromTop (8);
+
+        auto page = side.removeFromTop (jmax (230, side.getHeight() * 2 / 5));
+        soundPage.setBounds (page);
+        auto grainRow = page.withSizeKeepingCentre (page.getWidth(), 90);
         ModKnob* grains[] = { grainMix.get(), grainSize.get(), grainDensity.get(), grainPitch.get(), grainSpray.get() };
         const int gw = grainRow.getWidth() / 5;
         for (auto* k : grains)
             k->setBounds (grainRow.removeFromLeft (gw));
-        side.removeFromTop (12);
+        side.removeFromTop (10);
         lfoPanel.setBounds (side);
     }
 
@@ -401,6 +481,7 @@ void ScrapeScapeEditor::timerCallback()
     padModeButton.setButtonText (padModeButton.getToggleState() ? String::fromUTF8 ("XY Pad \xe2\x97\x8f") : String ("XY Pad"));
 
     lfoPanel.refresh();
+    if (soundPage.isVisible()) soundPage.repaintKnobs();
     for (auto* k : { activity.get(), brightness.get(), reverb.get(), echo.get(), fxMix.get(),
                      grainMix.get(), grainSize.get(), grainDensity.get(), grainPitch.get(), grainSpray.get() })
         k->repaint();

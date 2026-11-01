@@ -4,6 +4,7 @@
 
 #include "PluginProcessor.h"
 #include "UI/ImageOutliner.h"
+#include "UI/SceneCanvas.h"
 
 #include <juce_audio_utils/juce_audio_utils.h>
 
@@ -197,6 +198,49 @@ int main (int argc, char** argv)
                "presets keep picture size, XY pad, granular and LFO settings");
     }
 
+    // ---- Per-engine sound controls ---------------------------------------------
+    {
+        auto measure = [&] (std::function<void (ScrapeScapeProcessor&)> setup)
+        {
+            auto pr = std::make_unique<ScrapeScapeProcessor>();
+            pr->getElements().clear();
+            pr->getElements().add (scape::ElementType::Bell, 0.5f, 0.4f, 1.2f);
+            pr->getElements().add (scape::ElementType::Drone, 0.3f, 0.6f, 1.0f);
+            setup (*pr);
+            pr->prepareToPlay (sr, block);
+            double e = 0.0; const int nb = (int) (8.0 * sr / block);
+            for (int i = 0; i < nb; ++i) { pr->processBlock (buffer, midi); e += buffer.getRMSLevel (0, 0, block); }
+            return e / nb;
+        };
+        auto setP = [] (ScrapeScapeProcessor& pr, const juce::String& id, float v)
+        { auto* param = pr.getParameters().getParameter (id); param->setValueNotifyingHost (param->convertTo0to1 (v)); };
+
+        const double normal = measure ([] (ScrapeScapeProcessor&) {});
+        const double muted = measure ([&] (ScrapeScapeProcessor& pr)
+                                      { setP (pr, "bell_level", 0.0f); setP (pr, "drone_level", 0.0f); });
+        const double loud = measure ([&] (ScrapeScapeProcessor& pr)
+                                     { setP (pr, "drone_level", 1.0f); setP (pr, "drone_sub", 1.0f); });
+        std::printf ("      engine levels: normal %.4f  muted %.6f  louder %.4f\n", normal, muted, loud);
+        check (muted < normal * 0.05 && loud > normal * 1.2, "per-engine Level controls change the sound");
+
+        auto pr = std::make_unique<ScrapeScapeProcessor>();
+        pr->prepareToPlay (sr, block);
+        const int target = scape::voiceTarget ((int) scape::ElementType::Bell, 5);   // Bell "Metal"
+        pr->setLfoTarget (2, target);
+        setP (*pr, "lfo3_rate", 4.0f);
+        setP (*pr, "lfo3_depth", 0.8f);
+        float lo = 2.0f, hi = -1.0f;
+        for (int i = 0; i < 100; ++i)
+        {
+            pr->processBlock (buffer, midi);
+            const float m = pr->getModulatedValue (target);
+            lo = juce::jmin (lo, m); hi = juce::jmax (hi, m);
+        }
+        check (ScrapeScapeProcessor::getTargetParamID (target) == "bell_ratio" && lo >= 0.0f && hi - lo > 0.4f,
+               "LFO on an engine control (Bell Metal) modulates it");
+        check (juce::String (scape::getModTargetName (target)) == "Bell Metal", "engine targets have readable names");
+    }
+
     // ---- Custom images --------------------------------------------------------
     // Make a test "photo": a sunset gradient with a bright disc in the middle.
     auto photoFile = juce::File (outDir).getChildFile ("test-photo.png");
@@ -326,6 +370,26 @@ int main (int argc, char** argv)
             if (auto* tb = dynamic_cast<juce::TextButton*> (child))
                 if (tb->getButtonText().startsWith ("XY Pad")) { tb->setToggleState (false, juce::dontSendNotification); }
         check (snapshot (*editor, "editor-lfo.png"), "editor renders enlarged picture + LFO markers");
+
+        // Let the visuals evolve for ~12 seconds of sound with more elements interacting.
+        fresh->getElements().add (scape::ElementType::Pluck, 0.55f, 0.45f, 1.2f);
+        fresh->getElements().add (scape::ElementType::Wind, 0.75f, 0.65f, 1.0f);
+        fresh->getElements().add (scape::ElementType::Pulse, 0.40f, 0.30f, 1.0f);
+        fresh->getElements().add (scape::ElementType::Spark, 0.62f, 0.40f, 0.8f);
+        SceneCanvas* canvas = nullptr;
+        for (auto* child : editor->getChildren())
+            if (auto* c = dynamic_cast<SceneCanvas*> (child)) canvas = c;
+        int maxParticles = 0;
+        if (canvas != nullptr)
+            for (int frame = 0; frame < 360; ++frame)
+            {
+                for (int i = 0; i < (int) (sr / 30.0 / block) + 1; ++i) fresh->processBlock (buffer, midi);
+                canvas->advanceAnimation (1.0f / 30.0f);
+                maxParticles = juce::jmax (maxParticles, canvas->getVisualParticleCount());
+            }
+        std::printf ("      visual particles: %d\n", maxParticles);
+        check (maxParticles > 50, "visual field emits particles from playing elements");
+        check (snapshot (*editor, "editor-visuals.png"), "editor renders the visual field");
 
         for (auto* child : editor->getChildren())
             if (auto* o = dynamic_cast<ImageOutliner*> (child))

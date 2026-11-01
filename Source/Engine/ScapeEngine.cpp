@@ -164,7 +164,8 @@ void ScapeEngine::syncVoices (ElementBank& bank) noexcept
         // Inactive slots keep their old seed so the voice can fade its tail out.
         ElementSnapshot e = s;
         if (! e.active) e.seed = voices[(size_t) i].getSeed();
-        voices[(size_t) i].update (e, mods);
+        const int vt = std::clamp (voices[(size_t) i].getType(), 0, kNumSoundTypes - 1);
+        voices[(size_t) i].update (e, mods, params.voice[(size_t) vt]);
     }
 }
 
