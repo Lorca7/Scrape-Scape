@@ -68,7 +68,7 @@ void ImageOutliner::setShape (int shape)
 
 void ImageOutliner::updatePreview()
 {
-    preview = SkinTools::renderGlyph (skin);
+    preview = SkinTools::scaledHighQuality (SkinTools::renderGlyph (skin), 320);
     repaint (previewBox);
 }
 

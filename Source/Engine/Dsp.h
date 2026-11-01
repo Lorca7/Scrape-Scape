@@ -91,6 +91,13 @@ struct Svf
         return v2;
     }
 
+    // All three outputs at once.
+    void processAll (float v0, float& low, float& band, float& high) noexcept
+    {
+        low = process (v0, band);
+        high = v0 - k * band - low;
+    }
+
     float lowpass (float v0) noexcept  { float b; return process (v0, b); }
     float bandpass (float v0) noexcept { float b; process (v0, b); return b * k; } // unity gain at centre
 

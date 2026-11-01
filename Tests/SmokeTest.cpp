@@ -72,7 +72,7 @@ int main (int argc, char** argv)
     auto renderFile = juce::File (outDir).getChildFile ("offline-render.wav");
     renderFile.deleteFile();
     auto& renderer = proc->getRenderer();
-    check (renderer.start (renderFile, 30.0, sr, proc->getEngineParams(), proc->getElements()), "offline render starts");
+    check (renderer.start (renderFile, 30.0, sr, proc->getChainParams(), proc->getElements()), "offline render starts");
     const auto t0 = juce::Time::getMillisecondCounterHiRes();
     while (renderer.getStatus() == OfflineRenderer::Status::rendering)
         juce::Thread::sleep (20);
@@ -126,6 +126,76 @@ int main (int argc, char** argv)
                && std::abs (e0.x - 0.25f) < 1e-4f && std::abs (e0.size - 1.5f) < 1e-4f,
            "elements restore from saved state");
     check (proc2->getEngineParams().mood == scape::kNumMoods - 1, "parameters restore from saved state");
+
+    // ---- Effects pad, granular, LFOs -------------------------------------------
+    {
+        auto setP = [&] (ScrapeScapeProcessor& pr, const char* id, float v)
+        {
+            auto* param = pr.getParameters().getParameter (id);
+            param->setValueNotifyingHost (param->convertTo0to1 (v));
+        };
+        auto fx = std::make_unique<ScrapeScapeProcessor>();
+        fx->prepareToPlay (sr, block);
+
+        auto runRms = [&] (double seconds)
+        {
+            double e = 0.0; int nb = (int) (seconds * sr / block); bool finite = true;
+            for (int i = 0; i < nb; ++i)
+            {
+                fx->processBlock (buffer, midi);
+                for (int ch = 0; ch < 2; ++ch)
+                    for (int k = 0; k < block; ++k)
+                        finite = finite && std::isfinite (buffer.getSample (ch, k));
+                e += buffer.getRMSLevel (0, 0, block);
+            }
+            return finite ? e / nb : -1.0;
+        };
+
+        const double dry = runRms (3.0);
+        bool allOk = dry > 0.005;
+        for (int t = 0; t < scape::kNumPadEffects; ++t)
+        {
+            setP (*fx, "fx_type", (float) t);
+            setP (*fx, "fx_mix", 1.0f);
+            setP (*fx, "fx_x", 0.8f);
+            setP (*fx, "fx_y", 0.3f);
+            const double wet = runRms (2.0);
+            std::printf ("      %-9s rms %.4f\n", scape::getPadEffectInfo (t).name, wet);
+            allOk = allOk && wet > 0.0005 && wet < 0.9;
+        }
+        check (allOk, "every XY pad effect produces finite, sensible audio");
+
+        setP (*fx, "fx_mix", 0.0f);
+        setP (*fx, "grain_mix", 1.0f);
+        setP (*fx, "grain_pitch", 12.0f);
+        const double grains = runRms (3.0);
+        check (grains > 0.003 && grains < 0.9, "granular effect produces audio");
+
+        fx->setLfoTarget (0, (int) scape::ModTarget::PadX);
+        setP (*fx, "lfo1_rate", 5.0f);
+        setP (*fx, "lfo1_depth", 1.0f);
+        float lo = 2.0f, hi = -1.0f;
+        for (int i = 0; i < 100; ++i)
+        {
+            fx->processBlock (buffer, midi);
+            const float m = fx->getModulatedValue ((int) scape::ModTarget::PadX);
+            lo = juce::jmin (lo, m); hi = juce::jmax (hi, m);
+        }
+        check (fx->getLfoTarget (0) == (int) scape::ModTarget::PadX && lo >= 0.0f && hi - lo > 0.5f,
+               "LFO assigned to Pad X sweeps it");
+        check (fx->getModulatedValue ((int) scape::ModTarget::Reverb) < 0.0f, "unassigned targets report no modulation");
+
+        // Picture scale + effects settings survive presets.
+        fx->getElements().setScale (0, 2.5f);
+        auto pf = juce::File (outDir).getChildFile ("fx.scapepreset");
+        fx->savePreset (pf);
+        auto fx2 = std::make_unique<ScrapeScapeProcessor>();
+        fx2->loadPreset (pf);
+        const auto c2 = fx2->getChainParams();
+        check (std::abs (fx2->getElements().get (0).scale - 2.5f) < 1e-4f && c2.pad.type == scape::kNumPadEffects - 1
+                   && c2.grain.mix > 0.99f && c2.lfo[0].target == (int) scape::ModTarget::PadX && c2.lfo[0].rate > 4.9f,
+               "presets keep picture size, XY pad, granular and LFO settings");
+    }
 
     // ---- Custom images --------------------------------------------------------
     // Make a test "photo": a sunset gradient with a bright disc in the middle.
@@ -232,6 +302,30 @@ int main (int argc, char** argv)
         fresh->getSkins().set ((int) scape::ElementType::Bell, ell);
         editor->resized();
         check (snapshot (*editor, "editor-images.png"), "editor renders custom images");
+
+        for (auto* child : editor->getChildren())
+            if (auto* o = dynamic_cast<ImageOutliner*> (child))
+            {
+                juce::ignoreUnused (o);
+            }
+
+        // Enlarged picture (crisp cache) + LFOs assigned + XY pad mode.
+        fresh->getElements().setScale (0, 2.2f);   // the drone in the default scene
+        fresh->setLfoTarget (0, (int) scape::ModTarget::PadX);
+        fresh->setLfoTarget (1, (int) scape::ModTarget::GrainSize);
+        fresh->setLfoTarget (2, (int) scape::ModTarget::Reverb);
+        auto* fxType = fresh->getParameters().getParameter ("fx_type");
+        fxType->setValueNotifyingHost (fxType->convertTo0to1 (2.0f));
+        fresh->getParameters().getParameter ("fx_mix")->setValueNotifyingHost (0.7f);
+        for (int i = 0; i < 40; ++i) fresh->processBlock (buffer, midi);
+        for (auto* child : editor->getChildren())
+            if (auto* tb = dynamic_cast<juce::TextButton*> (child))
+                if (tb->getButtonText().startsWith ("XY Pad")) { tb->setToggleState (true, juce::dontSendNotification); }
+        check (snapshot (*editor, "editor-pad.png"), "editor renders XY pad mode");
+        for (auto* child : editor->getChildren())
+            if (auto* tb = dynamic_cast<juce::TextButton*> (child))
+                if (tb->getButtonText().startsWith ("XY Pad")) { tb->setToggleState (false, juce::dontSendNotification); }
+        check (snapshot (*editor, "editor-lfo.png"), "editor renders enlarged picture + LFO markers");
 
         for (auto* child : editor->getChildren())
             if (auto* o = dynamic_cast<ImageOutliner*> (child))

@@ -8,7 +8,7 @@ OfflineRenderer::~OfflineRenderer()
 }
 
 bool OfflineRenderer::start (const juce::File& dest, double seconds, double sampleRate,
-                             const scape::EngineParams& params, const scape::ElementBank& elements)
+                             const scape::ChainParams& params, const scape::ElementBank& elements)
 {
     if (isThreadRunning())
         return false;
@@ -16,7 +16,7 @@ bool OfflineRenderer::start (const juce::File& dest, double seconds, double samp
     destination = dest;
     lengthSeconds = juce::jlimit (1.0, 4.0 * 3600.0, seconds);
     rate = sampleRate > 0.0 ? sampleRate : 48000.0;
-    engineParams = params;
+    chainParams = params;
     bank.copyFrom (elements);
     progress = 0.0f;
     status = Status::rendering;
@@ -37,9 +37,9 @@ void OfflineRenderer::acknowledge() noexcept
 
 void OfflineRenderer::run()
 {
-    auto engine = std::make_unique<scape::ScapeEngine>();
-    engine->setParams (engineParams);
-    engine->prepare (rate);
+    auto chain = std::make_unique<scape::SoundChain>();
+    chain->getEngine().setParams (chainParams.engine);
+    chain->prepare (rate);
 
     auto tempFile = destination.getSiblingFile (destination.getFileNameWithoutExtension() + ".rendering.wav");
     tempFile.deleteFile();
@@ -78,7 +78,7 @@ void OfflineRenderer::run()
         }
 
         const int n = (int) std::min<juce::int64> (block, total - pos);
-        engine->process (buffer.getWritePointer (0), buffer.getWritePointer (1), n, bank);
+        chain->process (buffer.getWritePointer (0), buffer.getWritePointer (1), n, bank, chainParams);
 
         // Gentle fade-out over the last few seconds so the file ends cleanly.
         if (pos + n > fadeStart)

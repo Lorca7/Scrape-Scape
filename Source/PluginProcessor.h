@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Engine/ScapeEngine.h"
+#include "Engine/SoundChain.h"
 #include "OfflineRenderer.h"
 #include "Recorder.h"
 #include "Skins.h"
@@ -42,7 +42,16 @@ public:
     scape::ElementBank& getElements() noexcept { return elements; }
     juce::AudioProcessorValueTreeState& getParameters() noexcept { return parameters; }
     scape::EngineParams getEngineParams() const noexcept;
-    int getChordRoot() const noexcept { return engine.getChordRoot(); }
+    scape::ChainParams getChainParams() const noexcept;
+    int getChordRoot() const noexcept { return chain.getEngine().getChordRoot(); }
+
+    // Modulation readouts for the UI
+    float getModulatedValue (int target) const noexcept { return chain.getModulatedValue (target); }
+    float getLfoValue (int index) const noexcept { return chain.getLfoValue (index); }
+    int getLfoTarget (int index) const noexcept;
+    void setLfoTarget (int index, int target);
+    static juce::String getTargetParamID (int target);
+    static juce::String lfoParamID (int index, const char* suffix) { return "lfo" + juce::String (index + 1) + "_" + suffix; }
 
     // Transport: Stop fades the music out and pauses the engine; Play fades it back in.
     void setPlaying (bool shouldPlay) noexcept { playing.store (shouldPlay); }
@@ -87,7 +96,7 @@ private:
     SkinBank skins;
     mutable juce::CriticalSection presetNameLock;
     juce::String currentPresetName { "Default" };
-    scape::ScapeEngine engine;
+    scape::SoundChain chain;
     Recorder recorder;
     OfflineRenderer renderer;
     double currentSampleRate = 0.0;
@@ -102,6 +111,18 @@ private:
     std::atomic<float>* reverbParam = nullptr;
     std::atomic<float>* delayParam = nullptr;
     std::atomic<float>* volumeParam = nullptr;
+    std::atomic<float>* fxTypeParam = nullptr;
+    std::atomic<float>* fxXParam = nullptr;
+    std::atomic<float>* fxYParam = nullptr;
+    std::atomic<float>* fxMixParam = nullptr;
+    std::atomic<float>* grainMixParam = nullptr;
+    std::atomic<float>* grainSizeParam = nullptr;
+    std::atomic<float>* grainDensityParam = nullptr;
+    std::atomic<float>* grainPitchParam = nullptr;
+    std::atomic<float>* grainSprayParam = nullptr;
+    struct LfoParamPtrs { std::atomic<float>* shape = nullptr; std::atomic<float>* rate = nullptr;
+                          std::atomic<float>* depth = nullptr; std::atomic<float>* target = nullptr; };
+    std::array<LfoParamPtrs, scape::kNumLfos> lfoParams;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ScrapeScapeProcessor)
 };

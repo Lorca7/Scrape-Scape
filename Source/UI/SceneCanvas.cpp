@@ -1,5 +1,7 @@
 #include "SceneCanvas.h"
 #include "ScapeLookAndFeel.h"
+#include "ModKnob.h"
+#include "Engine/Modulation.h"
 
 using namespace juce;
 using namespace scape;
@@ -25,7 +27,7 @@ void drawElementGlyph (Graphics& g, int type, Point<float> c, float r, float act
     {
         // The user's cut-out: fit inside a box a little larger than the built-in glyph,
         // breathing slightly with the element's activity.
-        const float box = r * 2.6f * (1.0f + 0.07f * a);
+        const float box = r * 2.6f;   // drawn 1:1 from a pre-scaled cache, so it stays sharp
         const auto dest = Rectangle<float> (box, box).withCentre (c);
         Graphics::ScopedSaveState state (g);
         g.setImageResamplingQuality (Graphics::mediumResamplingQuality);
@@ -256,7 +258,7 @@ int SceneCanvas::hitTestElement (Point<float> p) const noexcept
 
         const auto c = toScreen (e.x, e.y);
         const float d = c.getDistanceFrom (p);
-        if (d < radiusFor (e.type, e.size) * 1.3f + 6.0f && d < bestDist)
+        if (d < radiusFor (e.type, e.size) * e.scale * 1.3f + 6.0f && d < bestDist)
         {
             best = i;
             bestDist = d;
@@ -311,9 +313,9 @@ void SceneCanvas::paint (Graphics& g)
         g.fillPath (dashed);
     }
 
-    std::array<Image, kNumElementTypes> glyphs;
-    for (int t = 0; t < kNumElementTypes; ++t)
-        glyphs[(size_t) t] = skins.getGlyph (t);
+    const bool padMode = isPadMode && isPadMode();
+    const float physicalScale = g.getInternalContext().getPhysicalPixelScaleFactor();
+    if (padMode) g.beginTransparencyLayer (0.4f);
 
     for (int i = 0; i < kMaxElements; ++i)
     {
@@ -326,15 +328,38 @@ void SceneCanvas::paint (Graphics& g)
         if (getElementInfo (e.type).isModifier)
             act = 0.4f + 0.3f * std::sin (time * 1.3f + (float) i);
 
-        drawElementGlyph (g, e.type, c, radiusFor (e.type, e.size), act, time + (float) i, i == hoverIndex || i == dragIndex,
-                          &glyphs[(size_t) jlimit (0, kNumElementTypes - 1, e.type)]);
+        const float r = radiusFor (e.type, e.size) * e.scale;
+        const auto img = glyphCache.get (skins, jlimit (0, kNumElementTypes - 1, e.type), roundToInt (r * 2.6f * physicalScale));
+        drawElementGlyph (g, e.type, c, r, act, time + (float) i, ! padMode && (i == hoverIndex || i == dragIndex),
+                          img.isValid() ? &img : nullptr);
+
+        // Picture-size handle on the selected element.
+        if (! padMode && (i == selectedIndex || i == resizeIndex))
+        {
+            const auto h = handlePosition (e).translated (0.0f, bob);
+            g.setColour (Colours::black.withAlpha (0.5f));
+            g.fillEllipse (h.x - 9.0f, h.y - 9.0f, 18.0f, 18.0f);
+            g.setColour (Colours::white.withAlpha (0.9f));
+            g.drawEllipse (h.x - 9.0f, h.y - 9.0f, 18.0f, 18.0f, 1.5f);
+            Path arrow;
+            arrow.startNewSubPath (h.x - 4.0f, h.y - 4.0f); arrow.lineTo (h.x + 4.0f, h.y + 4.0f);
+            arrow.startNewSubPath (h.x + 4.0f, h.y); arrow.lineTo (h.x + 4.0f, h.y + 4.0f); arrow.lineTo (h.x, h.y + 4.0f);
+            arrow.startNewSubPath (h.x - 4.0f, h.y); arrow.lineTo (h.x - 4.0f, h.y - 4.0f); arrow.lineTo (h.x, h.y - 4.0f);
+            g.strokePath (arrow, PathStrokeType (1.4f));
+        }
     }
+
+    if (padMode) g.endTransparencyLayer();
+    paintPad (g);
 
     // Footer hints and status.
     auto footer = getLocalBounds().reduced (12, 8).removeFromBottom (18);
     g.setFont (FontOptions (12.0f));
     g.setColour (Colours::white.withAlpha (0.45f));
-    g.drawText (String::fromUTF8 ("Click to place  \xc2\xb7  drag to move  \xc2\xb7  scroll to resize  \xc2\xb7  double-click or right-click to remove"),
+    if (padMode)
+        g.drawText (String::fromUTF8 ("XY pad: drag anywhere to play the effect  \xc2\xb7  turn off XY Pad to edit elements"), footer, Justification::bottomLeft);
+    else
+    g.drawText (String::fromUTF8 ("Click to place  \xc2\xb7  drag to move  \xc2\xb7  scroll = presence  \xc2\xb7  corner handle = picture size  \xc2\xb7  double-click to remove"),
                 footer, Justification::bottomLeft);
 
     if (getChordRoot)
@@ -370,14 +395,43 @@ void SceneCanvas::paint (Graphics& g)
 }
 
 //==============================================================================
+Point<float> SceneCanvas::handlePosition (const ElementSnapshot& e) const noexcept
+{
+    const float half = radiusFor (e.type, e.size) * e.scale * 1.3f;
+    return toScreen (e.x, e.y).translated (half * 0.85f, half * 0.85f);
+}
+
 void SceneCanvas::mouseDown (const MouseEvent& e)
 {
     const auto p = e.position;
+
+    if (isPadMode && isPadMode())
+    {
+        padDragging = true;
+        if (onPadGesture) onPadGesture (true);
+        const auto n = toNormalised (p);
+        if (onPadMoved) onPadMoved (n.x, n.y);
+        return;
+    }
+
+    if (selectedIndex >= 0 && ! e.mods.isPopupMenu())
+    {
+        const auto sel = bank.get (selectedIndex);
+        if (sel.active && handlePosition (sel).getDistanceFrom (p) < 11.0f)
+        {
+            resizeIndex = selectedIndex;
+            resizeStartScale = sel.scale;
+            resizeStartDistance = jmax (4.0f, toScreen (sel.x, sel.y).getDistanceFrom (p));
+            return;
+        }
+    }
+
     const int hit = hitTestElement (p);
 
     if (e.mods.isPopupMenu() || e.mods.isAltDown())
     {
         if (hit >= 0) bank.remove (hit);
+        if (hit == selectedIndex) selectedIndex = -1;
         hoverIndex = -1;
         repaint();
         return;
@@ -386,6 +440,7 @@ void SceneCanvas::mouseDown (const MouseEvent& e)
     if (hit >= 0)
     {
         dragIndex = hit;
+        selectedIndex = hit;
         const auto el = bank.get (hit);
         dragOffset = toScreen (el.x, el.y) - p;
     }
@@ -394,6 +449,7 @@ void SceneCanvas::mouseDown (const MouseEvent& e)
         const int type = getSelectedType ? getSelectedType() : 0;
         const auto n = toNormalised (p);
         dragIndex = bank.add ((ElementType) type, n.x, n.y, 1.0f);
+        selectedIndex = dragIndex;
         dragOffset = {};
 
         if (dragIndex < 0)
@@ -407,6 +463,22 @@ void SceneCanvas::mouseDown (const MouseEvent& e)
 
 void SceneCanvas::mouseDrag (const MouseEvent& e)
 {
+    if (padDragging)
+    {
+        const auto n = toNormalised (e.position);
+        if (onPadMoved) onPadMoved (n.x, n.y);
+        return;
+    }
+
+    if (resizeIndex >= 0)
+    {
+        const auto el = bank.get (resizeIndex);
+        const float dist = toScreen (el.x, el.y).getDistanceFrom (e.position);
+        bank.setScale (resizeIndex, resizeStartScale * dist / resizeStartDistance);
+        repaint();
+        return;
+    }
+
     if (dragIndex >= 0)
     {
         const auto n = toNormalised (e.position + dragOffset);
@@ -417,11 +489,33 @@ void SceneCanvas::mouseDrag (const MouseEvent& e)
 
 void SceneCanvas::mouseUp (const MouseEvent&)
 {
+    if (padDragging)
+    {
+        padDragging = false;
+        if (onPadGesture) onPadGesture (false);
+    }
     dragIndex = -1;
+    resizeIndex = -1;
 }
 
 void SceneCanvas::mouseMove (const MouseEvent& e)
 {
+    if (isPadMode && isPadMode())
+    {
+        setMouseCursor (MouseCursor::CrosshairCursor);
+        return;
+    }
+
+    if (selectedIndex >= 0)
+    {
+        const auto sel = bank.get (selectedIndex);
+        if (sel.active && handlePosition (sel).getDistanceFrom (e.position) < 11.0f)
+        {
+            setMouseCursor (MouseCursor::BottomRightCornerResizeCursor);
+            return;
+        }
+    }
+
     const int hit = hitTestElement (e.position);
     if (hit != hoverIndex)
     {
@@ -438,17 +532,19 @@ void SceneCanvas::mouseExit (const MouseEvent&)
 
 void SceneCanvas::mouseDoubleClick (const MouseEvent& e)
 {
+    if (isPadMode && isPadMode()) return;
     const int hit = hitTestElement (e.position);
     if (hit >= 0)
     {
         bank.remove (hit);
-        dragIndex = hoverIndex = -1;
+        dragIndex = hoverIndex = selectedIndex = -1;
         repaint();
     }
 }
 
 void SceneCanvas::mouseWheelMove (const MouseEvent& e, const MouseWheelDetails& wheel)
 {
+    if (isPadMode && isPadMode()) return;
     const int hit = hitTestElement (e.position);
     if (hit >= 0)
     {
@@ -456,4 +552,96 @@ void SceneCanvas::mouseWheelMove (const MouseEvent& e, const MouseWheelDetails& 
         bank.setSize (hit, el.size * (1.0f + wheel.deltaY * 0.6f));
         repaint();
     }
+}
+
+//==============================================================================
+void SceneCanvas::paintPad (Graphics& g)
+{
+    if (! getPadInfo) return;
+    const auto info = getPadInfo();
+    const bool padMode = isPadMode && isPadMode();
+    if (! padMode && info.mix <= 0.0f && ! lfoDragHover) return;
+
+    const auto bounds = getLocalBounds().toFloat();
+    const auto puck = toScreen (info.x, info.y);
+    const auto accent = ScapeColours::accent;
+
+    if (padMode || lfoDragHover)
+    {
+        g.setColour (Colours::white.withAlpha (0.06f));
+        for (int i = 1; i < 4; ++i)
+        {
+            g.drawVerticalLine (roundToInt (bounds.getWidth() * (float) i / 4.0f), 0.0f, bounds.getHeight());
+            g.drawHorizontalLine (roundToInt (bounds.getHeight() * (float) i / 4.0f), 0.0f, bounds.getWidth());
+        }
+
+        g.setColour (accent.withAlpha (0.35f));
+        g.drawVerticalLine (roundToInt (puck.x), 0.0f, bounds.getHeight());
+        g.drawHorizontalLine (roundToInt (puck.y), 0.0f, bounds.getWidth());
+
+        // Effect name and axis meanings
+        auto label = getLocalBounds().reduced (14, 10).removeFromTop (22);
+        g.setColour (Colours::white.withAlpha (0.85f));
+        g.setFont (FontOptions (15.0f, Font::bold));
+        g.drawText (info.name, label, Justification::topLeft);
+        g.setFont (FontOptions (12.0f));
+        g.setColour (Colours::white.withAlpha (0.6f));
+        g.drawText (String::fromUTF8 ("X \xe2\x86\x92  ") + info.xLabel + String::fromUTF8 ("      Y \xe2\x86\x91  ") + info.yLabel
+                        + "      Dry/Wet " + String (roundToInt (info.mix * 100.0f)) + "%",
+                    label.translated (0, 20), Justification::topLeft);
+    }
+
+    // Base puck
+    const float pr = padMode ? 15.0f : 9.0f;
+    g.setGradientFill (ColourGradient (accent.withAlpha (0.45f * (padMode ? 1.0f : 0.6f)), puck.x, puck.y,
+                                       accent.withAlpha (0.0f), puck.x + pr * 3.0f, puck.y, true));
+    g.fillEllipse (puck.x - pr * 3.0f, puck.y - pr * 3.0f, pr * 6.0f, pr * 6.0f);
+    g.setColour (Colours::white.withAlpha (padMode ? 0.95f : 0.5f));
+    g.drawEllipse (puck.x - pr, puck.y - pr, pr * 2.0f, pr * 2.0f, 2.0f);
+
+    // Where the LFOs are actually holding it right now
+    if (info.modX >= 0.0f || info.modY >= 0.0f)
+    {
+        const auto m = toScreen (info.modX >= 0.0f ? info.modX : info.x, info.modY >= 0.0f ? info.modY : info.y);
+        g.setColour (Colours::white.withAlpha (0.3f));
+        g.drawLine (Line<float> (puck, m), 1.0f);
+        g.setColour (accent.brighter (0.4f));
+        g.fillEllipse (m.x - 6.0f, m.y - 6.0f, 12.0f, 12.0f);
+    }
+
+    if (lfoDragHover)
+    {
+        g.setColour (Colours::white.withAlpha (0.8f));
+        g.drawRoundedRectangle (bounds.reduced (3.0f), 12.0f, 2.0f);
+        g.setFont (FontOptions (16.0f));
+        g.drawText ("Drop to modulate the XY pad", getLocalBounds(), Justification::centred);
+    }
+}
+
+bool SceneCanvas::isInterestedInDragSource (const SourceDetails& d)
+{
+    return lfoIndexFromDrag (d.description) >= 0;
+}
+
+void SceneCanvas::itemDragEnter (const SourceDetails&) { lfoDragHover = true; repaint(); }
+void SceneCanvas::itemDragExit (const SourceDetails&)  { lfoDragHover = false; repaint(); }
+
+void SceneCanvas::itemDropped (const SourceDetails& d)
+{
+    lfoDragHover = false;
+    repaint();
+    const int lfo = lfoIndexFromDrag (d.description);
+    if (lfo < 0) return;
+
+    PopupMenu menu;
+    menu.addSectionHeader ("LFO " + String (lfo + 1) + " moves the XY pad...");
+    menu.addItem ((int) ModTarget::PadX, String::fromUTF8 ("Left \xe2\x86\x94 right (X)"));
+    menu.addItem ((int) ModTarget::PadY, String::fromUTF8 ("Up \xe2\x86\x95 down (Y)"));
+    menu.addItem ((int) ModTarget::FxMix, "Dry/Wet amount");
+    menu.showMenuAsync (PopupMenu::Options().withTargetScreenArea (Rectangle<int> (1, 1).withPosition (localPointToGlobal (d.localPosition))),
+                        [this, lfo, safe = Component::SafePointer<SceneCanvas> (this)] (int result)
+                        {
+                            if (safe != nullptr && result > 0 && onLfoDropped)
+                                onLfoDropped (lfo, result);
+                        });
 }

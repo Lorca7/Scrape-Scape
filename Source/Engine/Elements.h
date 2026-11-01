@@ -44,7 +44,8 @@ struct ElementSnapshot
     bool active = false;
     int type = 0;
     float x = 0.5f, y = 0.5f;   // normalised canvas position (0..1, y = 0 is the top)
-    float size = 1.0f;          // 0.4 .. 1.8
+    float size = 1.0f;          // 0.4 .. 1.8  (sound presence + glyph size)
+    float scale = 1.0f;         // 0.3 .. 5    (picture size only, no effect on sound)
     std::uint32_t seed = 0;     // unique id + random seed for the voice
 };
 
@@ -56,7 +57,7 @@ public:
     {
         std::atomic<bool> active { false };
         std::atomic<int> type { 0 };
-        std::atomic<float> x { 0.5f }, y { 0.5f }, size { 1.0f };
+        std::atomic<float> x { 0.5f }, y { 0.5f }, size { 1.0f }, scale { 1.0f };
         std::atomic<std::uint32_t> seed { 0 };
 
         // Written by the engine, read by the UI.
@@ -65,11 +66,13 @@ public:
     };
 
     static constexpr float minSize = 0.4f, maxSize = 1.8f;
+    static constexpr float minScale = 0.3f, maxScale = 5.0f;
 
     int add (ElementType type, float x, float y, float size = 1.0f) noexcept;
     void remove (int index) noexcept;
     void move (int index, float x, float y) noexcept;
     void setSize (int index, float size) noexcept;
+    void setScale (int index, float scale) noexcept;
     void clear() noexcept;
 
     ElementSnapshot get (int index) const noexcept;

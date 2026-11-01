@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Engine/ScapeEngine.h"
+#include "Engine/SoundChain.h"
 
 #include <juce_audio_formats/juce_audio_formats.h>
 
@@ -17,7 +17,7 @@ public:
     ~OfflineRenderer() override;
 
     bool start (const juce::File& destination, double seconds, double sampleRate,
-                const scape::EngineParams& params, const scape::ElementBank& elements);
+                const scape::ChainParams& params, const scape::ElementBank& elements);
     void cancel();
 
     Status getStatus() const noexcept   { return status.load(); }
@@ -32,7 +32,7 @@ private:
 
     juce::File destination;
     double lengthSeconds = 60.0, rate = 48000.0;
-    scape::EngineParams engineParams;
+    scape::ChainParams chainParams;
     scape::ElementBank bank;
     std::atomic<Status> status { Status::idle };
     std::atomic<float> progress { 0.0f };

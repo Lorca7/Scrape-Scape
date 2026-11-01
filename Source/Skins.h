@@ -5,6 +5,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <array>
+#include <map>
 #include <atomic>
 #include <vector>
 
@@ -43,7 +44,24 @@ namespace SkinTools
 
     // Fills in glyph + encodedSource from source/shape/outline.
     void finalise (ElementSkin& skin);
+
+    // High-quality resize (progressive halving, then a final smooth pass).
+    juce::Image scaledHighQuality (const juce::Image& img, int maxDimension);
 }
+
+class SkinBank;
+
+// UI-thread cache of glyphs pre-scaled to the exact on-screen pixel size, so
+// pictures stay sharp at any size (including Retina screens).
+class GlyphCache
+{
+public:
+    juce::Image get (const SkinBank& bank, int type, int pixelSize);
+
+private:
+    int version = -1;
+    std::map<int, juce::Image> cache;
+};
 
 // Thread-safe holder of one optional skin per element type.
 class SkinBank

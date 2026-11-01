@@ -54,7 +54,7 @@ void ScrapeScapeEditor::ElementButton::paintButton (Graphics& g, bool over, bool
 
 //==============================================================================
 ScrapeScapeEditor::ScrapeScapeEditor (ScrapeScapeProcessor& p)
-    : AudioProcessorEditor (&p), processor (p), canvas (p.getElements(), p.getSkins())
+    : AudioProcessorEditor (&p), processor (p), canvas (p.getElements(), p.getSkins()), lfoPanel (p.getParameters())
 {
 
     canvas.getSelectedType = [this] { return selectedType; };
@@ -117,12 +117,84 @@ ScrapeScapeEditor::ScrapeScapeEditor (ScrapeScapeProcessor& p)
                                                        &renderButton, &takesButton, &timeLabel })
         addAndMakeVisible (c);
 
-    addKnob (activity, "activity", "Activity", Colour (0xff9cf2c0));
-    addKnob (brightness, "brightness", "Brightness", Colour (0xffffd27f));
-    addKnob (tempo, "tempo", "Tempo", Colour (0xffff9a8c));
-    addKnob (reverb, "reverb", "Reverb", Colour (0xff7fb8ff));
-    addKnob (echo, "delay", "Echo", Colour (0xff8fd6d6));
-    addKnob (volume, "volume", "Volume", Colour (0xffe8ecf5));
+    using LP = ModKnob::LabelPosition;
+    activity   = makeKnob ("activity",   "Activity",   Colour (0xff9cf2c0), ModTarget::Activity,   LP::left);
+    brightness = makeKnob ("brightness", "Brightness", Colour (0xffffd27f), ModTarget::Brightness, LP::left);
+    tempo      = makeKnob ("tempo",      "Tempo",      Colour (0xffff9a8c), ModTarget::None,       LP::left);
+    reverb     = makeKnob ("reverb",     "Reverb",     Colour (0xff7fb8ff), ModTarget::Reverb,     LP::left);
+    echo       = makeKnob ("delay",      "Echo",       Colour (0xff8fd6d6), ModTarget::Echo,       LP::left);
+    volume     = makeKnob ("volume",     "Volume",     Colour (0xffe8ecf5), ModTarget::None,       LP::left);
+
+    // ---- XY effects pad bar ----
+    padModeButton.setButtonText ("XY Pad");
+    padModeButton.setClickingTogglesState (true);
+    padModeButton.setColour (TextButton::buttonOnColourId, ScapeColours::accent.withAlpha (0.45f));
+    padModeButton.setTooltip ("Turn the canvas into an XY effects pad. Turn off to place and move elements again.");
+    padModeButton.onClick = [this] { canvas.repaint(); };
+    addAndMakeVisible (padModeButton);
+
+    for (int i = 0; i < kNumPadEffects; ++i)
+    {
+        auto* b = fxButtons.add (new TextButton (getPadEffectInfo (i).name));
+        b->setRadioGroupId (3001);
+        b->setClickingTogglesState (true);
+        b->setColour (TextButton::buttonOnColourId, ScapeColours::accent.withAlpha (0.3f));
+        b->setTooltip (String (getPadEffectInfo (i).name) + String::fromUTF8 (" \xe2\x80\x94 X: ") + String::fromUTF8 (getPadEffectInfo (i).xLabel)
+                       + String::fromUTF8 (",  Y: ") + String::fromUTF8 (getPadEffectInfo (i).yLabel));
+        b->onClick = [this, i, b]
+        {
+            if (! b->getToggleState()) return;
+            setParam ("fx_type", (float) i);
+            if (processor.getChainParams().pad.mix <= 0.0f)
+                setParam ("fx_mix", 0.6f);   // make the first choice audible straight away
+        };
+        addAndMakeVisible (b);
+    }
+    fxMix = makeKnob ("fx_mix", "Dry/Wet", ScapeColours::accent, ModTarget::FxMix, LP::left);
+
+    // ---- Granular ----
+    grainMix     = makeKnob ("grain_mix",     "Dry/Wet", Colour (0xffe6f7ff), ModTarget::GrainMix,     LP::above);
+    grainSize    = makeKnob ("grain_size",    "Size",    Colour (0xffe6f7ff), ModTarget::GrainSize,    LP::above);
+    grainDensity = makeKnob ("grain_density", "Density", Colour (0xffe6f7ff), ModTarget::GrainDensity, LP::above);
+    grainPitch   = makeKnob ("grain_pitch",   "Pitch",   Colour (0xffe6f7ff), ModTarget::GrainPitch,   LP::above);
+    grainSpray   = makeKnob ("grain_spray",   "Spray",   Colour (0xffe6f7ff), ModTarget::GrainSpray,   LP::above);
+
+    // ---- LFOs ----
+    lfoPanel.getLfoValue = [this] (int i) { return processor.getLfoValue (i); };
+    lfoPanel.getLfoTarget = [this] (int i) { return processor.getLfoTarget (i); };
+    lfoPanel.setLfoTarget = [this] (int lfo, int target) { assignLfo (lfo, target); };
+    addAndMakeVisible (lfoPanel);
+
+    // ---- Canvas as XY pad ----
+    canvas.isPadMode = [this] { return padModeButton.getToggleState(); };
+    canvas.getPadInfo = [this]
+    {
+        const auto c = processor.getChainParams();
+        const auto& info = getPadEffectInfo (c.pad.type);
+        SceneCanvas::PadInfo pi;
+        pi.name = String::fromUTF8 (info.name);
+        pi.xLabel = String::fromUTF8 (info.xLabel);
+        pi.yLabel = String::fromUTF8 (info.yLabel);
+        pi.x = c.pad.x; pi.y = c.pad.y;
+        pi.modX = processor.getModulatedValue ((int) ModTarget::PadX);
+        pi.modY = processor.getModulatedValue ((int) ModTarget::PadY);
+        const float modMix = processor.getModulatedValue ((int) ModTarget::FxMix);
+        pi.mix = modMix >= 0.0f ? modMix : c.pad.mix;
+        return pi;
+    };
+    canvas.onPadGesture = [this] (bool starting)
+    {
+        for (auto* id : { "fx_x", "fx_y" })
+            if (auto* param = processor.getParameters().getParameter (id))
+                starting ? param->beginChangeGesture() : param->endChangeGesture();
+    };
+    canvas.onPadMoved = [this] (float x, float y)
+    {
+        for (auto [id, v] : { std::pair<const char*, float> { "fx_x", x }, { "fx_y", y } })
+            if (auto* param = processor.getParameters().getParameter (id))
+                param->setValueNotifyingHost (param->convertTo0to1 (v));
+    };
+    canvas.onLfoDropped = [this] (int lfo, int target) { assignLfo (lfo, target); };
 
     outliner.onApply = [this] (int type, ElementSkin skin)
     {
@@ -138,10 +210,12 @@ ScrapeScapeEditor::ScrapeScapeEditor (ScrapeScapeProcessor& p)
     setLookAndFeel (&lookAndFeel);
 
     setResizable (true, true);
-    setResizeLimits (1180, 680, 2400, 1600);
-    setSize (1240, 780);
+    setResizeLimits (1300, 800, 2600, 1700);
+    setSize (1420, 880);
 
     updateTransport();
+    lfoPanel.refresh();
+    timerCallback();   // sync effect buttons etc. immediately
     lastTimerSeconds = Time::getMillisecondCounterHiRes() * 0.001;
     startTimerHz (30);
 }
@@ -152,21 +226,34 @@ ScrapeScapeEditor::~ScrapeScapeEditor()
     setLookAndFeel (nullptr);
 }
 
-void ScrapeScapeEditor::addKnob (Knob& knob, const String& paramID, const String& name, Colour colour)
+std::unique_ptr<ModKnob> ScrapeScapeEditor::makeKnob (const String& paramID, const String& name, Colour colour,
+                                                      ModTarget target, ModKnob::LabelPosition pos)
 {
-    knob.slider.setSliderStyle (Slider::RotaryHorizontalVerticalDrag);
-    knob.slider.setTextBoxStyle (Slider::TextBoxBelow, false, 70, 16);
-    knob.slider.setColour (Slider::rotarySliderFillColourId, colour);
-    knob.slider.setPopupDisplayEnabled (false, false, nullptr);
-    knob.attachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment> (processor.getParameters(), paramID, knob.slider);
+    auto k = std::make_unique<ModKnob> (processor.getParameters(), paramID, name, colour, (int) target, pos);
+    k->getModulatedValue = [this] (int t) { return processor.getModulatedValue (t); };
+    k->getLfoTarget = [this] (int lfo) { return processor.getLfoTarget (lfo); };
+    k->onLfoDropped = [this] (int lfo, int t) { assignLfo (lfo, t); };
+    addAndMakeVisible (*k);
+    return k;
+}
 
-    knob.label.setText (name, dontSendNotification);
-    knob.label.setJustificationType (Justification::centred);
-    knob.label.setFont (FontOptions (13.0f));
-    knob.label.setColour (Label::textColourId, ScapeColours::textDim);
+void ScrapeScapeEditor::assignLfo (int lfo, int target)
+{
+    processor.setLfoTarget (lfo, target);
+    lfoPanel.refresh();
+    if (target > 0)
+        canvas.flash ("LFO " + String (lfo + 1) + String::fromUTF8 (" \xe2\x86\x92 ") + getModTargetName (target), 1.8f);
+    repaint();
+}
 
-    addAndMakeVisible (knob.slider);
-    addAndMakeVisible (knob.label);
+void ScrapeScapeEditor::setParam (const String& id, float value)
+{
+    if (auto* p = processor.getParameters().getParameter (id))
+    {
+        p->beginChangeGesture();
+        p->setValueNotifyingHost (p->convertTo0to1 (value));
+        p->endChangeGesture();
+    }
 }
 
 //==============================================================================
@@ -191,6 +278,23 @@ void ScrapeScapeEditor::paint (Graphics& g)
     g.fillRoundedRectangle (bottom, 12.0f);
     g.setColour (ScapeColours::panelEdge.withAlpha (0.6f));
     g.drawRoundedRectangle (bottom, 12.0f, 1.0f);
+
+    for (auto r : { sidebarArea, fxBarArea })
+    {
+        g.setColour (ScapeColours::panel.withAlpha (0.6f));
+        g.fillRoundedRectangle (r.toFloat(), 12.0f);
+        g.setColour (ScapeColours::panelEdge.withAlpha (0.6f));
+        g.drawRoundedRectangle (r.toFloat(), 12.0f, 1.0f);
+    }
+    if (! sidebarArea.isEmpty())
+    {
+        g.setColour (ScapeColours::textDim);
+        g.setFont (FontOptions (12.0f, Font::bold));
+        g.drawText ("GRANULAR", sidebarArea.reduced (14, 10).removeFromTop (16), Justification::centredLeft);
+        g.setFont (FontOptions (11.0f));
+        g.drawText ("grains from everything that's playing", sidebarArea.reduced (14, 10).removeFromTop (16),
+                    Justification::centredRight);
+    }
 
     if (processor.isRecording())
     {
@@ -230,7 +334,7 @@ void ScrapeScapeEditor::resized()
     header.removeFromLeft (6);
     presetButton.setBounds (header.removeFromLeft (92));
 
-    // Bottom panel: palette + knobs
+    // Bottom panel: palette + main knobs
     auto bottom = area.removeFromBottom (190).reduced (24, 16);
     auto palette = bottom.removeFromTop (78);
     const int buttonW = palette.getWidth() / kNumElementTypes;
@@ -238,18 +342,39 @@ void ScrapeScapeEditor::resized()
         b->setBounds (palette.removeFromLeft (buttonW).reduced (3, 0));
 
     bottom.removeFromTop (8);
-    Knob* knobs[] = { &activity, &brightness, &tempo, &reverb, &echo, &volume };
+    ModKnob* knobs[] = { activity.get(), brightness.get(), tempo.get(), reverb.get(), echo.get(), volume.get() };
     const int knobW = bottom.getWidth() / 6;
     for (auto* k : knobs)
+        k->setBounds (bottom.removeFromLeft (knobW));
+
+    // Right sidebar: granular + LFOs
+    sidebarArea = area.removeFromRight (310).withTrimmedRight (12).withTrimmedBottom (2);
     {
-        auto cell = bottom.removeFromLeft (knobW);
-        auto labelArea = cell.removeFromLeft (cell.getWidth() / 2);
-        k->label.setBounds (labelArea.withTrimmedRight (4));
-        k->label.setJustificationType (Justification::centredRight);
-        k->slider.setBounds (cell.withSizeKeepingCentre (jmin (cell.getWidth(), 76), cell.getHeight()));
+        auto side = sidebarArea.reduced (14, 10);
+        side.removeFromTop (20);
+        auto grainRow = side.removeFromTop (84);
+        ModKnob* grains[] = { grainMix.get(), grainSize.get(), grainDensity.get(), grainPitch.get(), grainSpray.get() };
+        const int gw = grainRow.getWidth() / 5;
+        for (auto* k : grains)
+            k->setBounds (grainRow.removeFromLeft (gw));
+        side.removeFromTop (12);
+        lfoPanel.setBounds (side);
     }
 
-    canvas.setBounds (area.reduced (12, 0));
+    // FX bar under the canvas: pad toggle, effect buttons, dry/wet
+    fxBarArea = area.removeFromBottom (84).withTrimmedLeft (12).withTrimmedRight (10).withTrimmedTop (8);
+    {
+        auto bar = fxBarArea.reduced (10, 8);
+        padModeButton.setBounds (bar.removeFromLeft (84).withSizeKeepingCentre (84, 34));
+        bar.removeFromLeft (12);
+        fxMix->setBounds (bar.removeFromRight (170).expanded (0, 6));
+        bar.removeFromRight (8);
+        const int fw = bar.getWidth() / kNumPadEffects;
+        for (auto* b : fxButtons)
+            b->setBounds (bar.removeFromLeft (fw).reduced (2, 0).withSizeKeepingCentre (fw - 4, 34));
+    }
+
+    canvas.setBounds (area.withTrimmedLeft (12).withTrimmedRight (10));
     outliner.setBounds (getLocalBounds());
 }
 
@@ -267,6 +392,18 @@ void ScrapeScapeEditor::timerCallback()
     lastSkinVersion = skinVersion;
 
     updateTransport();
+
+    // Keep the effect buttons in sync with the (automatable) FX type, animate LFO bits.
+    const int fxType = processor.getChainParams().pad.type;
+    for (int i = 0; i < fxButtons.size(); ++i)
+        if (fxButtons[i]->getToggleState() != (i == fxType))
+            fxButtons[i]->setToggleState (i == fxType, dontSendNotification);
+    padModeButton.setButtonText (padModeButton.getToggleState() ? String::fromUTF8 ("XY Pad \xe2\x97\x8f") : String ("XY Pad"));
+
+    lfoPanel.refresh();
+    for (auto* k : { activity.get(), brightness.get(), reverb.get(), echo.get(), fxMix.get(),
+                     grainMix.get(), grainSize.get(), grainDensity.get(), grainPitch.get(), grainSpray.get() })
+        k->repaint();
 
     auto& renderer = processor.getRenderer();
     const auto status = renderer.getStatus();
@@ -413,7 +550,7 @@ void ScrapeScapeEditor::chooseRenderDestination (double seconds)
                                   if (! dest.hasFileExtension ("wav")) dest = dest.withFileExtension ("wav");
 
                                   processor.getRenderer().start (dest, seconds, processor.getCurrentSampleRate(),
-                                                                 processor.getEngineParams(), processor.getElements());
+                                                                 processor.getChainParams(), processor.getElements());
                                   updateTransport();
                               });
 }

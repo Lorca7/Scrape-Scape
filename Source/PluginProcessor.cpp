@@ -43,7 +43,91 @@ juce::AudioProcessorValueTreeState::ParameterLayout ScrapeScapeProcessor::create
                                                        NormalisableRange<float> (-40.0f, 6.0f, 0.1f), 0.0f,
                                                        AudioParameterFloatAttributes().withLabel ("dB").withStringFromValueFunction (
                                                            [] (float v, int) { return String (v, 1) + " dB"; })));
+    // ---- XY effects pad ----
+    StringArray fxNames;
+    for (int i = 0; i < kNumPadEffects; ++i)
+        fxNames.add (getPadEffectInfo (i).name);
+    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { "fx_type", 1 }, "FX Type", fxNames, 0));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "fx_x", 1 }, "FX Pad X", NormalisableRange<float> (0.0f, 1.0f), 0.5f, percent));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "fx_y", 1 }, "FX Pad Y", NormalisableRange<float> (0.0f, 1.0f), 0.5f, percent));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "fx_mix", 1 }, "FX Dry/Wet", NormalisableRange<float> (0.0f, 1.0f), 0.0f, percent));
+
+    // ---- Granular ----
+    auto mapped = [] (std::function<float (float)> from, std::function<float (float)> to, float lo, float hi)
+    {
+        return NormalisableRange<float> (lo, hi,
+                                         [from] (float, float, float n) { return from (n); },
+                                         [to] (float, float, float v) { return to (v); });
+    };
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "grain_mix", 1 }, "Grain Dry/Wet", NormalisableRange<float> (0.0f, 1.0f), 0.0f, percent));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "grain_size", 1 }, "Grain Size",
+        mapped (ParamMaps::grainSizeFromNorm, ParamMaps::grainSizeToNorm, 0.02f, 0.5f), 0.12f,
+        AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return String (roundToInt (v * 1000.0f)) + " ms"; })));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "grain_density", 1 }, "Grain Density",
+        mapped (ParamMaps::grainDensityFromNorm, ParamMaps::grainDensityToNorm, 1.0f, 60.0f), 12.0f,
+        AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return String (v, 1) + " /s"; })));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "grain_pitch", 1 }, "Grain Pitch",
+        NormalisableRange<float> (-12.0f, 12.0f, 1.0f), 0.0f,
+        AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int) { return (v > 0 ? "+" : "") + String (roundToInt (v)) + " st"; })));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "grain_spray", 1 }, "Grain Spray", NormalisableRange<float> (0.0f, 1.0f), 0.3f, percent));
+
+    // ---- LFOs ----
+    StringArray shapes, targets;
+    for (int i = 0; i < kNumLfoShapes; ++i) shapes.add (getLfoShapeName (i));
+    for (int i = 0; i < kNumModTargets; ++i) targets.add (getModTargetName (i));
+    static constexpr float defaultRates[kNumLfos] = { 0.08f, 0.15f, 0.5f, 2.0f };
+    static constexpr int defaultShapes[kNumLfos] = { 0, 1, 5, 4 };
+    for (int i = 0; i < kNumLfos; ++i)
+    {
+        const String n (i + 1);
+        layout.add (std::make_unique<AudioParameterChoice> (ParameterID { lfoParamID (i, "shape"), 1 }, "LFO " + n + " Shape", shapes, defaultShapes[i]));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { lfoParamID (i, "rate"), 1 }, "LFO " + n + " Rate",
+            mapped (ParamMaps::lfoRateFromNorm, ParamMaps::lfoRateToNorm, 0.01f, 10.0f), defaultRates[i],
+            AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int)
+                { return v < 1.0f ? String (v, 2) + " Hz" : String (v, 1) + " Hz"; })));
+        layout.add (std::make_unique<AudioParameterFloat> (ParameterID { lfoParamID (i, "depth"), 1 }, "LFO " + n + " Depth",
+            NormalisableRange<float> (0.0f, 1.0f), 0.35f, percent));
+        layout.add (std::make_unique<AudioParameterChoice> (ParameterID { lfoParamID (i, "target"), 1 }, "LFO " + n + " Target", targets, 0));
+    }
+
     return layout;
+}
+
+juce::String ScrapeScapeProcessor::getTargetParamID (int target)
+{
+    switch ((ModTarget) target)
+    {
+        case ModTarget::PadX:         return "fx_x";
+        case ModTarget::PadY:         return "fx_y";
+        case ModTarget::FxMix:        return "fx_mix";
+        case ModTarget::GrainMix:     return "grain_mix";
+        case ModTarget::GrainSize:    return "grain_size";
+        case ModTarget::GrainDensity: return "grain_density";
+        case ModTarget::GrainPitch:   return "grain_pitch";
+        case ModTarget::GrainSpray:   return "grain_spray";
+        case ModTarget::Reverb:       return ParamIDs::reverb;
+        case ModTarget::Echo:         return ParamIDs::delay;
+        case ModTarget::Brightness:   return ParamIDs::brightness;
+        case ModTarget::Activity:     return ParamIDs::activity;
+        case ModTarget::None:
+        case ModTarget::NumTargets:   break;
+    }
+    return {};
+}
+
+int ScrapeScapeProcessor::getLfoTarget (int index) const noexcept
+{
+    return juce::jlimit (0, kNumModTargets - 1, (int) std::lround (lfoParams[(size_t) index].target->load()));
+}
+
+void ScrapeScapeProcessor::setLfoTarget (int index, int target)
+{
+    if (auto* param = parameters.getParameter (lfoParamID (index, "target")))
+    {
+        param->beginChangeGesture();
+        param->setValueNotifyingHost (param->convertTo0to1 ((float) target));
+        param->endChangeGesture();
+    }
 }
 
 ScrapeScapeProcessor::ScrapeScapeProcessor()
@@ -57,6 +141,23 @@ ScrapeScapeProcessor::ScrapeScapeProcessor()
     reverbParam = parameters.getRawParameterValue (ParamIDs::reverb);
     delayParam = parameters.getRawParameterValue (ParamIDs::delay);
     volumeParam = parameters.getRawParameterValue (ParamIDs::volume);
+    fxTypeParam = parameters.getRawParameterValue ("fx_type");
+    fxXParam = parameters.getRawParameterValue ("fx_x");
+    fxYParam = parameters.getRawParameterValue ("fx_y");
+    fxMixParam = parameters.getRawParameterValue ("fx_mix");
+    grainMixParam = parameters.getRawParameterValue ("grain_mix");
+    grainSizeParam = parameters.getRawParameterValue ("grain_size");
+    grainDensityParam = parameters.getRawParameterValue ("grain_density");
+    grainPitchParam = parameters.getRawParameterValue ("grain_pitch");
+    grainSprayParam = parameters.getRawParameterValue ("grain_spray");
+    for (int i = 0; i < kNumLfos; ++i)
+    {
+        auto& l = lfoParams[(size_t) i];
+        l.shape = parameters.getRawParameterValue (lfoParamID (i, "shape"));
+        l.rate = parameters.getRawParameterValue (lfoParamID (i, "rate"));
+        l.depth = parameters.getRawParameterValue (lfoParamID (i, "depth"));
+        l.target = parameters.getRawParameterValue (lfoParamID (i, "target"));
+    }
 
     loadDefaultScene();
 }
@@ -109,6 +210,31 @@ EngineParams ScrapeScapeProcessor::getEngineParams() const noexcept
     return p;
 }
 
+ChainParams ScrapeScapeProcessor::getChainParams() const noexcept
+{
+    ChainParams c;
+    c.engine = getEngineParams();
+    c.pad.type = juce::jlimit (0, kNumPadEffects - 1, (int) std::lround (fxTypeParam->load()));
+    c.pad.x = fxXParam->load();
+    c.pad.y = fxYParam->load();
+    c.pad.mix = fxMixParam->load();
+    c.grain.mix = grainMixParam->load();
+    c.grain.size = grainSizeParam->load();
+    c.grain.density = grainDensityParam->load();
+    c.grain.pitch = grainPitchParam->load();
+    c.grain.spray = grainSprayParam->load();
+    for (int i = 0; i < kNumLfos; ++i)
+    {
+        const auto& l = lfoParams[(size_t) i];
+        auto& o = c.lfo[(size_t) i];
+        o.shape = juce::jlimit (0, kNumLfoShapes - 1, (int) std::lround (l.shape->load()));
+        o.rate = l.rate->load();
+        o.depth = l.depth->load();
+        o.target = juce::jlimit (0, kNumModTargets - 1, (int) std::lround (l.target->load()));
+    }
+    return c;
+}
+
 //==============================================================================
 void ScrapeScapeProcessor::prepareToPlay (double sampleRate, int)
 {
@@ -117,8 +243,8 @@ void ScrapeScapeProcessor::prepareToPlay (double sampleRate, int)
 
     currentSampleRate = sampleRate;
     monoScratch.assign (2 * 1024, 0.0f);
-    engine.setParams (getEngineParams());
-    engine.prepare (sampleRate);
+    chain.getEngine().setParams (getEngineParams());
+    chain.prepare (sampleRate);
 }
 
 void ScrapeScapeProcessor::releaseResources() {}
@@ -150,11 +276,11 @@ void ScrapeScapeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     }
     engineIdle = false;
 
-    engine.setParams (getEngineParams());
+    const auto chainParams = getChainParams();
 
     if (buffer.getNumChannels() >= 2)
     {
-        engine.process (buffer.getWritePointer (0), buffer.getWritePointer (1), n, elements);
+        chain.process (buffer.getWritePointer (0), buffer.getWritePointer (1), n, elements, chainParams);
     }
     else
     {
@@ -164,7 +290,7 @@ void ScrapeScapeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         for (int pos = 0; pos < n; pos += chunk)
         {
             const int len = juce::jmin (chunk, n - pos);
-            engine.process (monoScratch.data(), monoScratch.data() + chunk, len, elements);
+            chain.process (monoScratch.data(), monoScratch.data() + chunk, len, elements, chainParams);
             for (int i = 0; i < len; ++i)
                 mono[pos + i] = 0.5f * (monoScratch[(size_t) i] + monoScratch[(size_t) (chunk + i)]);
         }
@@ -219,6 +345,7 @@ juce::ValueTree ScrapeScapeProcessor::createStateTree()
         node.setProperty ("x", e.x, nullptr);
         node.setProperty ("y", e.y, nullptr);
         node.setProperty ("size", e.size, nullptr);
+        node.setProperty ("scale", e.scale, nullptr);
         node.setProperty ("seed", (juce::int64) e.seed, nullptr);
         list.appendChild (node, nullptr);
     }
@@ -248,6 +375,7 @@ void ScrapeScapeProcessor::applyStateTree (const juce::ValueTree& source, bool i
             e.x = (float) node.getProperty ("x", 0.5f);
             e.y = (float) node.getProperty ("y", 0.5f);
             e.size = (float) node.getProperty ("size", 1.0f);
+            e.scale = (float) node.getProperty ("scale", 1.0f);
             e.seed = (std::uint32_t) (juce::int64) node.getProperty ("seed", 0);
             elements.set (slot++, e);
         }

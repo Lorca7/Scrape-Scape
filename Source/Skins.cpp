@@ -8,8 +8,8 @@ using namespace juce;
 
 namespace
 {
-    constexpr int maxSourceSize = 1280;
-    constexpr int maxGlyphSize = 320;
+    constexpr int maxSourceSize = 2048;
+    constexpr int maxGlyphSize = 1024;
 
     bool hasTransparency (const Image& img)
     {
@@ -265,4 +265,44 @@ void SkinBank::fromValueTree (const ValueTree& tree)
     const ScopedLock sl (lock);
     skins = std::move (loaded);
     ++version;
+}
+
+//==============================================================================
+Image SkinTools::scaledHighQuality (const Image& img, int maxDimension)
+{
+    if (! img.isValid()) return {};
+    const int w = img.getWidth(), h = img.getHeight();
+    const float scale = (float) maxDimension / (float) jmax (w, h);
+    if (scale >= 1.0f) return img;
+
+    const int tw = jmax (1, roundToInt ((float) w * scale)), th = jmax (1, roundToInt ((float) h * scale));
+    Image current = img;
+
+    // Halve until within 2x of the target, so every pass averages neighbouring pixels.
+    while (current.getWidth() / 2 >= tw && current.getHeight() / 2 >= th)
+        current = current.rescaled (jmax (1, current.getWidth() / 2), jmax (1, current.getHeight() / 2),
+                                    Graphics::mediumResamplingQuality);
+
+    return current.rescaled (tw, th, Graphics::highResamplingQuality);
+}
+
+Image GlyphCache::get (const SkinBank& bank, int type, int pixelSize)
+{
+    if (bank.getVersion() != version || cache.size() > 256)
+    {
+        cache.clear();
+        version = bank.getVersion();
+    }
+
+    const auto full = bank.getGlyph (type);
+    if (! full.isValid()) return {};
+
+    pixelSize = jlimit (8, 2048, (pixelSize + 3) / 4 * 4);   // quantise to keep the cache small
+    const int key = type * 4096 + pixelSize;
+    if (auto it = cache.find (key); it != cache.end())
+        return it->second;
+
+    auto img = SkinTools::scaledHighQuality (full, pixelSize);
+    cache[key] = img;
+    return img;
 }

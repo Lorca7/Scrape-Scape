@@ -52,6 +52,7 @@ The first build downloads JUCE 8 automatically, so it takes a few minutes. The o
 | Place an element | Choose it in the palette, then click the canvas |
 | Move | Drag it. Height sets the register (higher = higher pitch), left/right sets the stereo position |
 | Resize (louder/softer, wider influence) | Scroll over it |
+| Resize just the picture | Click it, then drag its corner handle ⤡ |
 | Remove | Double-click, right-click or ⌥-click |
 | Change the whole feel | **Mood**: Dawn, Tide, Ember, Glacier, Dusk or Night (key, scale, pace, colour) |
 | Random scene / start over | **Scatter** / **Clear** |
@@ -74,6 +75,50 @@ A shared conductor moves through a slow chord progression, so every element stay
 element has its own random seed, so no two placements behave the same way.
 
 **Knobs:** Activity, Brightness, Tempo, Reverb, Echo and Volume. All of them can be automated in a DAW.
+
+## XY effects pad
+
+The strip under the canvas is an effects matrix. Choose an effect, raise **Dry/Wet**, then turn on
+**XY Pad**. The whole canvas becomes the pad: drag anywhere to play the effect. Turn **XY Pad**
+off again to place and move elements. The effect keeps running at its last position.
+
+| Effect | X (left → right) | Y (bottom → top) |
+|---|---|---|
+| **Filter** | low-pass ← centre (open) → high-pass | resonance |
+| **Wash** | reverb size (far right = freeze) | brightness |
+| **Dub Echo** | delay time (moving it bends the pitch, tape style) | feedback (into self-oscillation) |
+| **Warble** | wow/flutter depth | speed |
+| **Crush** | sample-rate reduction | bit reduction |
+| **Stutter** | slice length (tempo-synced, 1/16 beat to 2 beats) | number of repeats |
+| **Phaser** | sweep speed | feedback |
+| **Ring Mod** | carrier frequency | tremolo ↔ ring modulation |
+
+![xy pad](docs/xy-pad.png)
+
+## Granular
+
+The **GRANULAR** section on the right chops everything that's playing into tiny grains and scatters
+them. **Dry/Wet** sets how much you hear. **Size** is grain length (20–500 ms), **Density** is grains
+per second, **Pitch** shifts the grains (±12 semitones), and **Spray** scatters them in time and
+stereo, adding octave sparkles when turned up high.
+
+## LFOs
+
+There are four LFOs, each with a shape (Sine, Triangle, Saw, Square, Random, Drift), a **Rate**
+(0.01–10 Hz) and a **Depth**.
+
+- **Drag an LFO's round handle** onto the XY pad canvas (then choose X, Y or Dry/Wet), or onto any
+  knob that can be modulated: Activity, Brightness, Reverb, Echo, FX Dry/Wet and all the granular knobs.
+- Modulated knobs show a coloured marker for each LFO on them and a dot that follows the live value.
+  On the pad, a second dot shows where the LFO is currently pulling the puck.
+- Click an LFO's target button to pick a target from a list or clear it.
+
+## Picture size
+
+Select an element (click it) and drag its **corner handle ⤡** to resize the picture. This changes
+only how big it looks. Scrolling still changes the element's *presence* (its volume and its circle of
+influence). Pictures are kept at high resolution and redrawn from a cache at the exact on-screen pixel
+size, so they stay sharp at any size, including on Retina screens.
 
 ## Your own images
 
@@ -99,8 +144,8 @@ inside your presets and DAW projects, so they travel with them.
 
 ## Presets
 
-**Presets ▾** saves and loads *everything*: the elements and their positions, mood, all knobs, and
-your custom images.
+**Presets ▾** saves and loads *everything*: the elements, their positions and picture sizes, mood,
+all knobs, XY pad, granular and LFO settings, and your custom images.
 
 - **Save preset...** writes a `.scapepreset` file (by default to `~/Music/Scrape-Scape/Presets/`).
   Saved presets appear in the menu under **My presets**.

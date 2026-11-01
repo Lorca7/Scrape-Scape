@@ -54,10 +54,14 @@ target_sources(ScrapeScape PRIVATE
     Source/Engine/Elements.cpp
     Source/Engine/Voice.cpp
     Source/Engine/ScapeEngine.cpp
+    Source/Engine/FxPad.cpp
+    Source/Engine/SoundChain.cpp
     Source/Recorder.cpp
     Source/OfflineRenderer.cpp
     Source/Skins.cpp
     Source/UI/ImageOutliner.cpp
+    Source/UI/ModKnob.cpp
+    Source/UI/LfoPanel.cpp
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
     Source/UI/SceneCanvas.cpp

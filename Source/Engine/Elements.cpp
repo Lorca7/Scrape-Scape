@@ -44,6 +44,7 @@ int ElementBank::add (ElementType type, float x, float y, float size) noexcept
     s.x.store (std::clamp (x, 0.0f, 1.0f));
     s.y.store (std::clamp (y, 0.0f, 1.0f));
     s.size.store (std::clamp (size, minSize, maxSize));
+    s.scale.store (1.0f);
     s.seed.store (nextSeed.fetch_add (0x6d2b79f5u) * 2654435761u + 1u);
     s.activity.store (0.0f);
     s.active.store (true, std::memory_order_release);
@@ -71,6 +72,12 @@ void ElementBank::setSize (int index, float size) noexcept
         slots[(size_t) index].size.store (std::clamp (size, minSize, maxSize));
 }
 
+void ElementBank::setScale (int index, float scale) noexcept
+{
+    if (index >= 0 && index < kMaxElements)
+        slots[(size_t) index].scale.store (std::clamp (scale, minScale, maxScale));
+}
+
 void ElementBank::clear() noexcept
 {
     for (auto& s : slots)
@@ -86,6 +93,7 @@ ElementSnapshot ElementBank::get (int index) const noexcept
     e.x = s.x.load();
     e.y = s.y.load();
     e.size = s.size.load();
+    e.scale = s.scale.load();
     e.seed = s.seed.load();
     return e;
 }
@@ -98,6 +106,7 @@ void ElementBank::set (int index, const ElementSnapshot& e) noexcept
     s.x.store (std::clamp (e.x, 0.0f, 1.0f));
     s.y.store (std::clamp (e.y, 0.0f, 1.0f));
     s.size.store (std::clamp (e.size, minSize, maxSize));
+    s.scale.store (std::clamp (e.scale, minScale, maxScale));
     s.seed.store (e.seed != 0 ? e.seed : nextSeed.fetch_add (0x6d2b79f5u) * 2654435761u + 1u);
     s.active.store (e.active, std::memory_order_release);
 }

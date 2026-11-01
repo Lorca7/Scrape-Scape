@@ -2,6 +2,8 @@
 
 #include "PluginProcessor.h"
 #include "UI/ImageOutliner.h"
+#include "UI/LfoPanel.h"
+#include "UI/ModKnob.h"
 #include "UI/SceneCanvas.h"
 #include "UI/ScapeLookAndFeel.h"
 
@@ -9,6 +11,7 @@
 
 class ScrapeScapeEditor : public juce::AudioProcessorEditor,
                           public juce::FileDragAndDropTarget,
+                          public juce::DragAndDropContainer,
                           private juce::Timer
 {
 public:
@@ -40,14 +43,11 @@ private:
         std::function<void()> onMenuRequested;
     };
 
-    struct Knob
-    {
-        juce::Slider slider;
-        juce::Label label;
-        std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
-    };
-
-    bool showSubtitle() const noexcept { return getWidth() >= 1360; }
+    std::unique_ptr<ModKnob> makeKnob (const juce::String& paramID, const juce::String& name, juce::Colour colour,
+                                       scape::ModTarget target, ModKnob::LabelPosition pos);
+    void assignLfo (int lfo, int target);
+    void setParam (const juce::String& id, float value);
+    bool showSubtitle() const noexcept { return getWidth() >= 1500; }
     void timerCallback() override;
     void toggleRecording();
     void exportLastTake();
@@ -65,7 +65,6 @@ private:
     void loadPresetFile (const juce::File& file);
     int paletteTypeAt (juce::Point<int> p) const;
     void setDropHighlight (int type, bool active);
-    void addKnob (Knob& knob, const juce::String& paramID, const juce::String& name, juce::Colour colour);
 
     ScrapeScapeProcessor& processor;
     ScapeLookAndFeel lookAndFeel;
@@ -84,7 +83,17 @@ private:
     juce::TextButton renderButton { "Render WAV..." }, takesButton { "Takes" };
     juce::Label timeLabel;
 
-    Knob activity, brightness, tempo, reverb, echo, volume;
+    std::unique_ptr<ModKnob> activity, brightness, tempo, reverb, echo, volume;
+
+    // XY effects pad bar (under the canvas)
+    juce::TextButton padModeButton;
+    juce::OwnedArray<juce::TextButton> fxButtons;
+    std::unique_ptr<ModKnob> fxMix;
+
+    // Granular section + LFOs (right sidebar)
+    std::unique_ptr<ModKnob> grainMix, grainSize, grainDensity, grainPitch, grainSpray;
+    LfoPanel lfoPanel;
+    juce::Rectangle<int> sidebarArea, fxBarArea;
 
     ImageOutliner outliner;
     bool dragActive = false;
