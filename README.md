@@ -61,13 +61,13 @@ The first build downloads JUCE 8 automatically, so it takes a few minutes. The o
 
 **Elements**
 
-- **Drone**: a breathing chord-tone pad. Its horizontal position picks root, third or fifth.
-- **Bell**: sparse FM bells.
-- **Pluck**: plucked-string figures that wander through the scale.
-- **Bass**: soft root notes that follow the chord changes.
-- **Shimmer**: a cloud of high sine grains.
-- **Wind**: tuned noise that sings between chord tones.
-- **Pulse**: a gentle euclidean rhythm, sent through the echo.
+- **Drone**: an ethereal, slowly breathing drone with airy octave and fifth shimmer. Its horizontal position picks root, third or fifth.
+- **Bowl**: crystal singing bowls with pure, slowly beating tones, struck or softly swelling in.
+- **Pluck**: a versatile pluck synth, from soft sine harp to bright saw and square plucks, playing wandering figures.
+- **Bass**: deep, soft root notes that glide with the chord changes.
+- **Shimmer**: a cloud of tiny high sine grains with octave sparkles.
+- **Chimes**: tuned wind chimes that ring out in clusters when the breeze picks up.
+- **Pad**: a lush, evolving chord pad of detuned voices.
 - **Shade** (modifier): darkens, calms and adds reverb to everything inside its dashed circle.
 - **Spark** (modifier): brightens and energises everything inside its circle.
 
@@ -91,19 +91,19 @@ core controls, plus two that are specific to it:
 | **Release** | How long it rings out after you remove it (0.2 to 4.2 s), and note decay |
 | **Octave** | Transposes the engine by up to two octaves |
 
-Engine-specific controls:
+Each engine also has four controls that shape its character (the second row of knobs):
 
-| Engine | Specific controls |
+| Engine | Character controls |
 |---|---|
-| Drone | Detune (oscillator spread), Sub (sub-octave level) |
-| Bell | Metal (FM ratio, from pure tones to clangorous), Density |
-| Pluck | Density, Speed (how fast a figure's notes follow each other) |
-| Bass | Drive (saturation), Walk (how often it steps to the fifth) |
-| Shimmer | Rate (grains per second), Spread (stereo scatter) |
-| Wind | Gusts, Air (breathy, unpitched noise) |
-| Pulse | Pattern (hits per bar), Density |
+| Drone | Detune (layer width), Sub (sub-octave), Shimmer (airy octave/fifth partials), Motion (slow drift and breathing) |
+| Bowl | Ring (pure crystal to rich metal overtones), Beat (speed of the slow wah-wah), Swell (struck to softly sung), Density |
+| Pluck | Wave (sine → triangle → saw → square), Snap (bright, percussive attack), Density, Speed |
+| Bass | Drive, Body (upper harmonics), Glide, Walk (steps to the fifth) |
+| Shimmer | Rate, Length (glitter to smooth haze), Spread, Sparkle (octave-up grains) |
+| Chimes | Breeze (gust strength), Cluster (how many ring together), Metal (bamboo-soft to bright tubes), Spread |
+| Pad | Detune (thin to lush), Warmth (bright saw to soft), Voicing (close triad to wide open chord), Motion |
 
-All 56 controls can be automated in a DAW and saved in presets. **Drag any LFO onto any of these
+All 70 controls can be automated in a DAW and saved in presets. **Drag any LFO onto any of these
 knobs** to animate it, such as sweeping Cutoff for a classic filter wobble. The LFO target menu lists
 them grouped by engine.
 

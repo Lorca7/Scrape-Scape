@@ -7,14 +7,14 @@ namespace scape
 {
 
 // Per-engine synth controls. Every sound type has the same six universal controls
-// (Level, Cutoff, Resonance, Attack, Release, Octave) plus two engine-specific ones.
+// (Level, Cutoff, Resonance, Attack, Release, Octave) plus four that shape its character.
 // All stored as 0..1.
-constexpr int kNumSoundTypes = 7;      // Drone .. Pulse (modifiers have no sound)
-constexpr int kVoiceParams = 8;
+constexpr int kNumSoundTypes = 7;      // Drone .. Pad (modifiers have no sound)
+constexpr int kVoiceParams = 10;
 
 enum VoiceParamIndex : int
 {
-    kLevel = 0, kCutoff, kResonance, kAttack, kRelease, kOctave, kSpecificA, kSpecificB
+    kLevel = 0, kCutoff, kResonance, kAttack, kRelease, kOctave, kChar1, kChar2, kChar3, kChar4
 };
 
 enum class VoiceParamDisplay { percent, octave, ratio, hits, hertz, seconds };
@@ -39,21 +39,35 @@ inline const VoiceParamSpec& getVoiceParamSpec (int type, int index) noexcept
         { "release",   "Release",   0.5f, D::seconds, "How long the sound rings out after it's removed (and note decay)" },
         { "octave",    "Octave",    0.5f, D::octave,  "Transpose this engine up or down" },
     };
-    static const VoiceParamSpec specific[kNumSoundTypes][2] = {
-        { { "detune", "Detune", 0.5f, D::percent, "Width of the detuned oscillators" },
-          { "sub",    "Sub",    0.5f, D::percent, "Level of the sub-octave" } },
-        { { "ratio",   "Metal",   0.5f, D::ratio,   "FM ratio: from pure tones to clangorous metal" },
-          { "density", "Density", 0.5f, D::percent, "How often bells strike" } },
-        { { "density", "Density", 0.5f, D::percent, "How often figures are played" },
+    static const VoiceParamSpec specific[kNumSoundTypes][4] = {
+        { { "detune",  "Detune",  0.5f, D::percent, "Width of the detuned oscillator layers" },
+          { "sub",     "Sub",     0.4f, D::percent, "Level of the sub-octave" },
+          { "shimmer", "Shimmer", 0.5f, D::percent, "Airy octave and fifth partials floating above" },
+          { "motion",  "Motion",  0.5f, D::percent, "How much the tone slowly drifts and breathes" } },
+        { { "ring",    "Ring",    0.3f, D::percent, "From pure crystal (left) to rich metal bowl overtones (right)" },
+          { "beat",    "Beat",    0.5f, D::percent, "Speed of the slow wah-wah beating of the bowl" },
+          { "swell",   "Swell",   0.5f, D::percent, "Struck (left) or softly sung, swelling in (right)" },
+          { "density", "Density", 0.5f, D::percent, "How often bowls sound" } },
+        { { "wave",    "Wave",    0.35f, D::percent, "Oscillator: sine, triangle, saw, square" },
+          { "snap",    "Snap",    0.5f, D::percent, "How bright and percussive the pluck's attack is" },
+          { "density", "Density", 0.5f, D::percent, "How often figures are played" },
           { "speed",   "Speed",   0.5f, D::percent, "How fast the notes of a figure follow each other" } },
-        { { "drive", "Drive", 0.4f, D::percent, "Saturation: from clean to warm and gritty" },
-          { "walk",  "Walk",  0.5f, D::percent, "How often it steps to the fifth" } },
-        { { "rate",   "Rate",   0.5f, D::percent, "Grains per second" },
-          { "spread", "Spread", 0.5f, D::percent, "Stereo scatter" } },
-        { { "gusts", "Gusts", 0.5f, D::percent, "How lively the gusts are" },
-          { "air",   "Air",   0.5f, D::percent, "Amount of breathy, unpitched air" } },
-        { { "pattern", "Pattern", 0.5f, D::hits,    "Hits per bar in the rhythm" },
-          { "density", "Density", 0.5f, D::percent, "How many pattern steps actually play" } },
+        { { "drive",   "Drive",   0.25f, D::percent, "Saturation: from clean to warm and gritty" },
+          { "body",    "Body",    0.4f, D::percent, "Upper harmonics: from pure sub to rounder tone" },
+          { "glide",   "Glide",   0.4f, D::percent, "How slowly it slides between notes" },
+          { "walk",    "Walk",    0.5f, D::percent, "How often it steps to the fifth" } },
+        { { "rate",    "Rate",    0.5f, D::percent, "Grains per second" },
+          { "length",  "Length",  0.5f, D::percent, "Grain length: glitter (left) to smooth haze (right)" },
+          { "spread",  "Spread",  0.5f, D::percent, "Stereo scatter" },
+          { "sparkle", "Sparkle", 0.4f, D::percent, "Chance of octave-up sparkles" } },
+        { { "breeze",  "Breeze",  0.5f, D::percent, "How strong and frequent the gusts are" },
+          { "cluster", "Cluster", 0.5f, D::percent, "How many chimes ring together in a gust" },
+          { "metal",   "Metal",   0.5f, D::percent, "From soft bamboo-like tones to bright metal tubes" },
+          { "spread",  "Spread",  0.6f, D::percent, "Stereo width of the chime set" } },
+        { { "detune",  "Detune",  0.5f, D::percent, "Spread of the detuned voices (thin to lush)" },
+          { "warmth",  "Warmth",  0.5f, D::percent, "Oscillator: bright saw (left) to warm, soft (right)" },
+          { "voicing", "Voicing", 0.5f, D::percent, "Chord size: close triad to wide, open voicing" },
+          { "motion",  "Motion",  0.5f, D::percent, "Slow filter movement and swells" } },
     };
 
     const int t = type < 0 ? 0 : (type >= kNumSoundTypes ? kNumSoundTypes - 1 : type);

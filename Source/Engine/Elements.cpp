@@ -8,13 +8,13 @@ namespace scape
 const ElementInfo& getElementInfo (ElementType type) noexcept
 {
     static const ElementInfo infos[kNumElementTypes] = {
-        { "Drone",   "A slow, breathing chord-tone pad. Higher on the canvas = higher register.", 0xff7fb8ffu, false },
-        { "Bell",    "Sparse FM bells that ring out over the harmony.",                         0xffffd27fu, false },
-        { "Pluck",   "Plucked-string figures that wander up and down the scale.",               0xff9cf2c0u, false },
-        { "Bass",    "Deep, soft root notes that follow the chord changes.",                    0xffb38cffu, false },
-        { "Shimmer", "A cloud of tiny high sine grains.",                                       0xffe6f7ffu, false },
-        { "Wind",    "Tuned, singing noise that drifts between chord tones.",                   0xff8fd6d6u, false },
-        { "Pulse",   "A gentle repeating pattern, echoed through the delay.",                   0xffff9a8cu, false },
+        { "Drone",   "An ethereal, slowly breathing drone with airy octave and fifth shimmer. Higher on the canvas = higher register.", 0xff8fc3ffu, false },
+        { "Bowl",    "Crystal singing bowls: pure, slowly beating tones that are struck or swell in.",                                  0xffc7ecffu, false },
+        { "Pluck",   "A versatile pluck synth: from soft sine harp to bright saw and square plucks.",                                   0xff9cf2c0u, false },
+        { "Bass",    "Deep, soft root notes that glide with the chord changes.",                                                        0xffb38cffu, false },
+        { "Shimmer", "A cloud of tiny high sine grains with octave sparkles.",                                                          0xffe6f7ffu, false },
+        { "Chimes",  "Tuned wind chimes that ring out in clusters when the breeze picks up.",                                           0xffffe6a3u, false },
+        { "Pad",     "A lush, evolving chord pad of detuned voices.",                                                                   0xffe0b0ffu, false },
         { "Shade",   "Modifier: darkens, calms and drowns nearby elements in reverb.",          0xff7a74a8u, true  },
         { "Spark",   "Modifier: brightens nearby elements and makes them more active.",         0xffffef5au, true  },
     };

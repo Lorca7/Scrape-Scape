@@ -204,7 +204,7 @@ int main (int argc, char** argv)
         {
             auto pr = std::make_unique<ScrapeScapeProcessor>();
             pr->getElements().clear();
-            pr->getElements().add (scape::ElementType::Bell, 0.5f, 0.4f, 1.2f);
+            pr->getElements().add (scape::ElementType::Bowl, 0.5f, 0.4f, 1.2f);
             pr->getElements().add (scape::ElementType::Drone, 0.3f, 0.6f, 1.0f);
             setup (*pr);
             pr->prepareToPlay (sr, block);
@@ -217,22 +217,22 @@ int main (int argc, char** argv)
 
         const double normal = measure ([] (ScrapeScapeProcessor&) {});
         const double muted = measure ([&] (ScrapeScapeProcessor& pr)
-                                      { setP (pr, "bell_level", 0.0f); setP (pr, "drone_level", 0.0f); });
+                                      { setP (pr, "bowl_level", 0.0f); setP (pr, "drone_level", 0.0f); });
         const double loud = measure ([&] (ScrapeScapeProcessor& pr)
                                      { setP (pr, "drone_level", 1.0f); setP (pr, "drone_sub", 1.0f); });
         std::printf ("      engine levels: normal %.4f  muted %.6f  louder %.4f\n", normal, muted, loud);
         check (muted < normal * 0.05 && loud > normal * 1.2, "per-engine Level controls change the sound");
 
         const double dark = measure ([&] (ScrapeScapeProcessor& pr)
-                                     { setP (pr, "bell_cutoff", 0.1f); setP (pr, "drone_cutoff", 0.1f); });
+                                     { setP (pr, "bowl_cutoff", 0.1f); setP (pr, "drone_cutoff", 0.1f); });
         const double resonant = measure ([&] (ScrapeScapeProcessor& pr)
-                                         { setP (pr, "bell_resonance", 1.0f); setP (pr, "drone_resonance", 1.0f); });
+                                         { setP (pr, "bowl_resonance", 1.0f); setP (pr, "drone_resonance", 1.0f); });
         std::printf ("      cutoff 0.1: %.4f  resonance 1.0: %.4f  (default %.4f)\n", dark, resonant, normal);
         check (dark < normal * 0.9 && resonant > 0.0 && std::isfinite (resonant), "Cutoff darkens and Resonance stays stable");
 
         auto pr = std::make_unique<ScrapeScapeProcessor>();
         pr->prepareToPlay (sr, block);
-        const int target = scape::voiceTarget ((int) scape::ElementType::Bell, 6);   // Bell "Metal"
+        const int target = scape::voiceTarget ((int) scape::ElementType::Bowl, 6);   // Bowl "Ring"
         pr->setLfoTarget (2, target);
         setP (*pr, "lfo3_rate", 4.0f);
         setP (*pr, "lfo3_depth", 0.8f);
@@ -243,9 +243,9 @@ int main (int argc, char** argv)
             const float m = pr->getModulatedValue (target);
             lo = juce::jmin (lo, m); hi = juce::jmax (hi, m);
         }
-        check (ScrapeScapeProcessor::getTargetParamID (target) == "bell_ratio" && lo >= 0.0f && hi - lo > 0.4f,
-               "LFO on an engine control (Bell Metal) modulates it");
-        check (juce::String (scape::getModTargetName (target)) == "Bell Metal", "engine targets have readable names");
+        check (ScrapeScapeProcessor::getTargetParamID (target) == "bowl_ring" && lo >= 0.0f && hi - lo > 0.4f,
+               "LFO on an engine control (Bowl Ring) modulates it");
+        check (juce::String (scape::getModTargetName (target)) == "Bowl Ring", "engine targets have readable names");
     }
 
     // ---- Custom images --------------------------------------------------------
@@ -286,7 +286,7 @@ int main (int argc, char** argv)
     skinBank.set ((int) scape::ElementType::Drone, skin);
     ElementSkin ell; ell.source = loaded; ell.shape = ElementSkin::ellipse;
     ell.outline = { { 0.05f, 0.75f }, { 0.45f, 0.98f } };
-    skinBank.set ((int) scape::ElementType::Bell, ell);
+    skinBank.set ((int) scape::ElementType::Bowl, ell);
 
     {
         juce::MemoryBlock st;
@@ -295,7 +295,7 @@ int main (int argc, char** argv)
         p3->setStateInformation (st.getData(), (int) st.getSize());
         const auto restored = p3->getSkins().get ((int) scape::ElementType::Drone);
         check (restored.isValid() && restored.shape == ElementSkin::freehand && restored.outline.size() == 40
-                   && p3->getSkins().hasSkin ((int) scape::ElementType::Bell)
+                   && p3->getSkins().hasSkin ((int) scape::ElementType::Bowl)
                    && ! p3->getSkins().hasSkin ((int) scape::ElementType::Pluck),
                "custom images + outlines survive save/restore");
     }
@@ -419,7 +419,7 @@ int main (int argc, char** argv)
 
         // With custom images on two elements, and the outliner open.
         fresh->getSkins().set ((int) scape::ElementType::Drone, skin);
-        fresh->getSkins().set ((int) scape::ElementType::Bell, ell);
+        fresh->getSkins().set ((int) scape::ElementType::Bowl, ell);
         editor->resized();
         check (snapshot (*editor, "editor-images.png"), "editor renders custom images");
 
@@ -449,8 +449,8 @@ int main (int argc, char** argv)
 
         // Let the visuals evolve for ~12 seconds of sound with more elements interacting.
         fresh->getElements().add (scape::ElementType::Pluck, 0.55f, 0.45f, 1.2f);
-        fresh->getElements().add (scape::ElementType::Wind, 0.75f, 0.65f, 1.0f);
-        fresh->getElements().add (scape::ElementType::Pulse, 0.40f, 0.30f, 1.0f);
+        fresh->getElements().add (scape::ElementType::Chimes, 0.75f, 0.65f, 1.0f);
+        fresh->getElements().add (scape::ElementType::Pad, 0.40f, 0.30f, 1.0f);
         fresh->getElements().add (scape::ElementType::Spark, 0.62f, 0.40f, 0.8f);
         SceneCanvas* canvas = nullptr;
         for (auto* child : editor->getChildren())

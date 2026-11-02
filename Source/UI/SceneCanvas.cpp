@@ -74,18 +74,24 @@ void drawElementGlyph (Graphics& g, int type, Point<float> c, float r, float act
             break;
         }
 
-        case ElementType::Bell:
+        case ElementType::Bowl:
         {
-            Path p;
-            p.startNewSubPath (c.x, c.y - r * 1.1f);
-            p.lineTo (c.x + r * 0.8f, c.y);
-            p.lineTo (c.x, c.y + r * 1.1f);
-            p.lineTo (c.x - r * 0.8f, c.y);
-            p.closeSubPath();
-            g.setColour (fill);
-            g.fillPath (p);
+            // A crystal singing bowl seen slightly from above: rim ellipse over a rounded body.
+            Path body;
+            body.startNewSubPath (c.x - r * 1.05f, c.y - r * 0.25f);
+            body.cubicTo (c.x - r * 1.0f, c.y + r * 0.75f, c.x + r * 1.0f, c.y + r * 0.75f, c.x + r * 1.05f, c.y - r * 0.25f);
+            body.closeSubPath();
+            g.setGradientFill (ColourGradient (col.withAlpha (0.95f), c.x, c.y - r * 0.3f, col.darker (0.5f).withAlpha (0.8f), c.x, c.y + r * 0.6f, false));
+            g.fillPath (body);
+            const auto rim = Rectangle<float> (r * 2.1f, r * 0.55f).withCentre ({ c.x, c.y - r * 0.25f });
+            g.setColour (Colours::white.withAlpha (0.35f + 0.4f * a));
+            g.fillEllipse (rim);
             g.setColour (edge);
-            g.strokePath (p, PathStrokeType (stroke));
+            g.drawEllipse (rim, stroke);
+            // Singing: a faint ring that swells with activity.
+            const float sing = r * (1.25f + 0.35f * a + 0.05f * std::sin (time * 2.0f));
+            g.setColour (edge.withAlpha (0.25f + 0.5f * a));
+            g.drawEllipse (Rectangle<float> (sing * 2.2f, sing * 0.8f).withCentre ({ c.x, c.y - r * 0.25f }), stroke * 0.8f);
             break;
         }
 
@@ -128,34 +134,40 @@ void drawElementGlyph (Graphics& g, int type, Point<float> c, float r, float act
             break;
         }
 
-        case ElementType::Wind:
+        case ElementType::Chimes:
         {
+            // Wind chimes: tubes of different lengths hanging from a bar, swaying gently.
+            const float barY = c.y - r * 0.95f;
             g.setColour (edge.withAlpha (0.9f));
-            for (int line = -1; line <= 1; ++line)
+            g.drawLine (c.x - r * 1.0f, barY, c.x + r * 1.0f, barY, stroke * 1.4f);
+            static constexpr float lengths[5] = { 1.1f, 1.55f, 1.85f, 1.45f, 1.2f };
+            for (int k = 0; k < 5; ++k)
             {
-                Path p;
-                const float yy = c.y + (float) line * r * 0.5f;
-                for (int i = 0; i <= 20; ++i)
-                {
-                    const float t = (float) i / 20.0f;
-                    const float xx = c.x - r * 1.2f + t * r * 2.4f;
-                    const float wy = yy + std::sin (t * 6.3f + time * 1.6f + (float) line) * r * 0.18f;
-                    if (i == 0) p.startNewSubPath (xx, wy); else p.lineTo (xx, wy);
-                }
-                g.strokePath (p, PathStrokeType (stroke * 1.2f, PathStrokeType::curved, PathStrokeType::rounded));
+                const float tx = c.x + ((float) k - 2.0f) * r * 0.42f;
+                const float sway = std::sin (time * (1.1f + 0.23f * (float) k) + (float) k) * r * (0.06f + 0.18f * a);
+                const float len = r * lengths[k];
+                const auto tube = Rectangle<float> (r * 0.2f, len).withPosition (tx - r * 0.1f + sway, barY + r * 0.12f);
+                g.setGradientFill (ColourGradient (col.brighter (0.5f), tube.getX(), tube.getY(), col.darker (0.3f), tube.getRight(), tube.getY(), false));
+                g.fillRoundedRectangle (tube, r * 0.08f);
+                g.setColour (edge.withAlpha (0.4f));
+                g.drawLine (tx, barY, tx + sway, barY + r * 0.12f, 1.0f);
             }
             break;
         }
 
-        case ElementType::Pulse:
+        case ElementType::Pad:
         {
-            g.setColour (fill);
-            g.fillEllipse (c.x - r * 0.4f, c.y - r * 0.4f, r * 0.8f, r * 0.8f);
-            g.setColour (edge.withAlpha (0.8f));
-            g.drawEllipse (c.x - r * 0.8f, c.y - r * 0.8f, r * 1.6f, r * 1.6f, stroke);
-            const float wave = r * (0.9f + 0.7f * a);
-            g.setColour (edge.withAlpha (0.6f * a));
-            g.drawEllipse (c.x - wave, c.y - wave, wave * 2, wave * 2, stroke);
+            // A soft cloud of overlapping, slowly drifting lobes.
+            for (int k = 0; k < 4; ++k)
+            {
+                const float ang = time * 0.25f + (float) k * MathConstants<float>::halfPi;
+                const auto lobe = c.getPointOnCircumference (r * 0.38f, ang);
+                const float lr = r * (0.62f + 0.06f * std::sin (time * 0.7f + (float) k) + 0.1f * a);
+                g.setGradientFill (ColourGradient (col.withAlpha (0.75f), lobe.x, lobe.y, col.withAlpha (0.12f), lobe.x + lr, lobe.y, true));
+                g.fillEllipse (lobe.x - lr, lobe.y - lr, lr * 2.0f, lr * 2.0f);
+            }
+            g.setColour (edge.withAlpha (0.55f));
+            g.drawEllipse (c.x - r * 0.95f, c.y - r * 0.95f, r * 1.9f, r * 1.9f, stroke * 0.8f);
             break;
         }
 

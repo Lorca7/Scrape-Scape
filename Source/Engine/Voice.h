@@ -53,22 +53,21 @@ public:
     int getType() const noexcept        { return (int) type; }
 
 private:
-    // ---- per-type helpers -------------------------------------------------
-    struct FmNote
+    // ---- engine state ---------------------------------------------------------
+    struct BowlNote
     {
         bool on = false;
-        float carInc = 0, modInc = 0, cPhase = 0, mPhase = 0;
-        float amp = 0, ampMul = 0, index = 0, indexMul = 0;
-        float gl = 0, gr = 0;
+        std::array<float, 5> phA {}, phB {}, incA {}, incB {}, amp {}, ampMul {};
+        float swell = 0.0f, swellInc = 1.0f, gl = 0.7f, gr = 0.7f;
     };
 
-    struct PluckString
+    struct PluckNote
     {
-        dsp::DelayLine line;
-        dsp::OnePole exciteLp;
         bool on = false;
-        float delay = 100, loopGain = 0.99f, last = 0, level = 0, gl = 0, gr = 0, velocity = 1;
-        int excite = 0;
+        float phase = 0.0f, inc = 0.0f, amp = 0.0f, ampMul = 0.999f, env = 0.0f, envMul = 0.999f;
+        float attack = 0.0f, attackInc = 1.0f, cutoffBase = 1000.0f, snap = 0.5f, wave = 0.3f, gl = 0.7f, gr = 0.7f;
+        dsp::Svf filter;
+        int counter = 0;
     };
 
     struct Grain
@@ -77,39 +76,40 @@ private:
         float inc = 0, phase = 0, pos = 0, posInc = 0, amp = 0, gl = 0, gr = 0;
     };
 
+    struct Chime
+    {
+        bool on = false;
+        std::array<float, 3> ph {}, inc {}, amp {}, mul {};
+        float gl = 0.7f, gr = 0.7f;
+    };
+
+    struct PadVoice
+    {
+        std::array<dsp::BlepSaw, 2> saw;
+        float triPhase = 0.0f, target = 220.0f, gl = 0.7f, gr = 0.7f;
+        dsp::OnePole freq;
+    };
+
     struct PluckEvent { int degree; long long tick; };
 
-    float chordToneDegree (const VoiceContext& ctx, int k) const noexcept { return (float) (ctx.chordRoot + 2 * k); }
+    // ---- helpers ------------------------------------------------------------
     float pitchHz (const VoiceContext& ctx, int degree, int octave) const noexcept;
-    void triggerBell (const VoiceContext& ctx) noexcept;
+    int octaveShift() const noexcept { return octaveFrom (vp[kOctave]); }
+    float basePan() const noexcept   { return (x * 2.0f - 1.0f) * 0.85f; }
+
+    void strikeBowl (const VoiceContext& ctx) noexcept;
     void triggerPluck (const VoiceContext& ctx, int degree, float velocity) noexcept;
+    void strikeChime (const VoiceContext& ctx) noexcept;
     void spawnGrain (const VoiceContext& ctx) noexcept;
+    void retunePad (const VoiceContext& ctx) noexcept;
 
     void renderDrone (const VoiceBuses&, int start, int n, float gain) noexcept;
-    void renderBell (const VoiceBuses&, int start, int n, float gain) noexcept;
+    void renderBowl (const VoiceBuses&, int start, int n, float gain) noexcept;
     void renderPluck (const VoiceBuses&, int start, int n, float gain) noexcept;
     void renderBass (const VoiceBuses&, int start, int n, float gain) noexcept;
     void renderShimmer (const VoiceBuses&, int start, int n, float gain, const VoiceContext&) noexcept;
-    void renderWind (const VoiceBuses&, int start, int n, float gain) noexcept;
-    void renderPulse (const VoiceBuses&, int start, int n, float gain) noexcept;
-
-    // ---- common state -----------------------------------------------------
-    float sr = 44100.0f;
-    ElementType type = ElementType::Drone;
-    std::uint32_t seed = 0;
-    bool active = false, sounding = false, needsInitialPitch = true;
-    float x = 0.5f, y = 0.5f, size = 1.0f;
-    VoiceMods mods;
-    VoiceParamArray vp = defaultVoiceParams()[0];
-    int lastPulseHits = -1;
-    dsp::Rng rng;
-    dsp::OnePole fade, levelSmooth, panSmooth;
-    float fadeInCoeff = 0, fadeOutCoeff = 0;
-    float activity = 0.0f, activityDecay = 0.999f;
-    float sendRev = 0.4f, sendDly = 0.1f, typeGain = 0.1f;
-    float curRev = 0, curDly = 0, curGl = 0.7f, curGr = 0.7f;
-    dsp::Svf voiceLpL, voiceLpR;
-    bool voiceFilterOn = false;
+    void renderChimes (const VoiceBuses&, int start, int n, float gain, const VoiceContext&) noexcept;
+    void renderPad (const VoiceBuses&, int start, int n, float gain) noexcept;
 
     inline void emit (const VoiceBuses& b, int i, float l, float r) noexcept
     {
@@ -119,26 +119,41 @@ private:
         b.dlyL[i] += l * curDly; b.dlyR[i] += r * curDly;
     }
 
-    float basePan() const noexcept { return (x * 2.0f - 1.0f) * 0.85f; }
+    // ---- common state -----------------------------------------------------
+    float sr = 44100.0f;
+    ElementType type = ElementType::Drone;
+    std::uint32_t seed = 0;
+    bool active = false, sounding = false, needsInitialPitch = true;
+    float x = 0.5f, y = 0.5f, size = 1.0f;
+    VoiceMods mods;
+    VoiceParamArray vp = defaultVoiceParams()[0];
+    dsp::Rng rng;
+    dsp::OnePole fade, levelSmooth, panSmooth;
+    float fadeInCoeff = 0, fadeOutCoeff = 0;
+    float activity = 0.0f, activityDecay = 0.999f;
+    float sendRev = 0.4f, sendDly = 0.1f, typeGain = 0.1f;
+    float curRev = 0, curDly = 0, curGl = 0.7f, curGr = 0.7f;
+    dsp::Svf voiceLpL, voiceLpR;
+    bool voiceFilterOn = false;
+    const Mood* lastMood = nullptr;
 
     // ---- Drone ------------------------------------------------------------
     std::array<dsp::BlepSaw, 4> saws;
-    dsp::SineOsc droneSub;
+    dsp::SineOsc droneSub, shimOct, shimFifth;
     dsp::Svf droneFilterL, droneFilterR;
     dsp::OnePole droneFreq;
-    float droneTarget = 220.0f, droneLfo = 0, droneLfoInc = 0, droneBreath = 0, droneBreathInc = 0;
+    float droneTarget = 220.0f, droneLfo = 0, droneLfoInc = 0, droneBreath = 0, droneBreathInc = 0, shimLfo = 0;
 
-    // ---- Bell -------------------------------------------------------------
-    std::array<FmNote, 6> bells;
-    float bellRatio = 3.5f;
+    // ---- Bowl -------------------------------------------------------------
+    std::array<BowlNote, 4> bowls;
 
     // ---- Pluck ------------------------------------------------------------
-    std::array<PluckString, 4> strings;
+    std::array<PluckNote, 6> plucks;
     std::array<PluckEvent, 6> motif {};
-    int motifLength = 0, motifPos = 0, nextString = 0;
+    int motifLength = 0, motifPos = 0, nextPluck = 0;
 
     // ---- Bass -------------------------------------------------------------
-    dsp::SineOsc bassOsc;
+    float bassPhase = 0.0f;
     dsp::OnePole bassFreq, bassEnv;
     float bassTarget = 55.0f, bassEnvTarget = 0;
     int bassHoldTicks = 0;
@@ -147,22 +162,19 @@ private:
     // ---- Shimmer ----------------------------------------------------------
     std::array<Grain, 10> grains;
     float grainCountdown = 0;
-    int lastChordRoot = 0;
-    const Mood* lastMood = nullptr;
 
-    // ---- Wind -------------------------------------------------------------
-    dsp::Svf windBandL, windBandR, windAir;
-    dsp::OnePole windCentreL, windCentreR, windGust;
-    float windTargetL = 600, windTargetR = 900, windGustTarget = 0.6f;
-    int windHarmonic = 3;
+    // ---- Chimes -----------------------------------------------------------
+    std::array<Chime, 12> chimes;
+    dsp::OnePole breeze;
+    float breezeTarget = 0.5f, chimeCountdown = 0.0f, clusterGap = 0.0f;
+    int clusterLeft = 0, nextChime = 0;
 
-    // ---- Pulse ------------------------------------------------------------
-    dsp::SineOsc pulseOsc;
-    dsp::Svf pulseFilter;
-    float pulseInc = 0, pulseEnv = 0, pulseEnvMul = 0.999f, pulseAttackInc = 0;
-    int pulseAttackRemaining = 0, pulseRotation = 0;
-    std::array<bool, 16> pulsePattern {};
-    int pulseStep = 0;
+    // ---- Pad --------------------------------------------------------------
+    std::array<PadVoice, 5> pad;
+    dsp::Svf padFilterL, padFilterR;
+    dsp::OnePole padSwell;
+    float padSwellTarget = 0.0f, padLfo = 0.0f, padLfoInc = 0.0f;
+    int padVoices = 3;
 };
 
 } // namespace scape

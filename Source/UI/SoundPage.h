@@ -2,6 +2,7 @@
 
 #include "ModKnob.h"
 #include "Skins.h"
+#include "Engine/VoiceParams.h"
 
 #include <array>
 #include <functional>
@@ -36,6 +37,6 @@ private:
 
     SkinBank& skins;
     juce::OwnedArray<TypeTab> tabs;
-    std::array<std::array<std::unique_ptr<ModKnob>, 8>, 7> knobs;
+    std::array<std::array<std::unique_ptr<ModKnob>, scape::kVoiceParams>, scape::kNumSoundTypes> knobs;
     int selected = 0;
 };

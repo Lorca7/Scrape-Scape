@@ -96,9 +96,10 @@ void SoundPage::resized()
     for (int row = 0; row < 2; ++row)
     {
         auto line = area.removeFromTop (rowH);
-        const int kw = line.getWidth() / 4;
-        for (int c = 0; c < 4; ++c)
-            if (auto& k = knobs[(size_t) selected][(size_t) (row * 4 + c)])
+        constexpr int perRow = kVoiceParams / 2;   // row 1: synth basics, row 2: character
+        const int kw = line.getWidth() / perRow;
+        for (int c = 0; c < perRow; ++c)
+            if (auto& k = knobs[(size_t) selected][(size_t) (row * perRow + c)])
                 k->setBounds (line.removeFromLeft (kw));
     }
 }

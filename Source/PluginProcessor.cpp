@@ -217,7 +217,7 @@ void ScrapeScapeProcessor::loadDefaultScene()
     elements.clear();
     elements.add (ElementType::Drone,   0.28f, 0.58f, 1.2f);
     elements.add (ElementType::Bass,    0.52f, 0.82f, 1.0f);
-    elements.add (ElementType::Bell,    0.70f, 0.30f, 1.0f);
+    elements.add (ElementType::Bowl,    0.70f, 0.30f, 1.0f);
     elements.add (ElementType::Shimmer, 0.84f, 0.18f, 0.9f);
     elements.add (ElementType::Shade,   0.18f, 0.40f, 0.9f);
 }
@@ -519,19 +519,19 @@ namespace
         using T = ElementType;
         static const std::vector<FactoryPreset> presets = {
             { "First Light", 0, 0.45f, 0.65f, 62.0f, 0.55f, 0.30f,
-              { { T::Drone, 0.28f, 0.58f, 1.2f }, { T::Bass, 0.52f, 0.82f, 1.0f }, { T::Bell, 0.70f, 0.30f, 1.0f },
+              { { T::Drone, 0.28f, 0.58f, 1.2f }, { T::Bass, 0.52f, 0.82f, 1.0f }, { T::Bowl, 0.70f, 0.30f, 1.0f },
                 { T::Shimmer, 0.84f, 0.18f, 0.9f }, { T::Spark, 0.76f, 0.24f, 0.8f } } },
             { "Undertow", 1, 0.35f, 0.45f, 54.0f, 0.65f, 0.40f,
-              { { T::Bass, 0.40f, 0.86f, 1.3f }, { T::Drone, 0.22f, 0.72f, 1.3f }, { T::Wind, 0.68f, 0.55f, 1.1f },
-                { T::Pulse, 0.80f, 0.40f, 0.8f }, { T::Shade, 0.30f, 0.70f, 1.2f } } },
+              { { T::Bass, 0.40f, 0.86f, 1.3f }, { T::Drone, 0.22f, 0.72f, 1.3f }, { T::Chimes, 0.68f, 0.55f, 1.1f },
+                { T::Pad, 0.80f, 0.40f, 0.8f }, { T::Shade, 0.30f, 0.70f, 1.2f } } },
             { "Embers", 2, 0.55f, 0.40f, 60.0f, 0.50f, 0.35f,
               { { T::Drone, 0.50f, 0.64f, 1.1f }, { T::Pluck, 0.25f, 0.45f, 1.0f }, { T::Pluck, 0.78f, 0.35f, 0.8f },
                 { T::Bass, 0.55f, 0.88f, 1.0f }, { T::Shade, 0.70f, 0.60f, 0.9f } } },
             { "Glass Garden", 3, 0.60f, 0.80f, 70.0f, 0.60f, 0.45f,
-              { { T::Bell, 0.25f, 0.30f, 1.0f }, { T::Bell, 0.70f, 0.22f, 0.8f }, { T::Shimmer, 0.50f, 0.15f, 1.0f },
+              { { T::Bowl, 0.25f, 0.30f, 1.0f }, { T::Bowl, 0.70f, 0.22f, 0.8f }, { T::Shimmer, 0.50f, 0.15f, 1.0f },
                 { T::Pluck, 0.40f, 0.50f, 0.9f }, { T::Drone, 0.60f, 0.65f, 0.9f }, { T::Spark, 0.30f, 0.35f, 1.0f } } },
             { "Night Window", 5, 0.30f, 0.35f, 48.0f, 0.75f, 0.25f,
-              { { T::Drone, 0.35f, 0.70f, 1.4f }, { T::Wind, 0.72f, 0.45f, 1.0f }, { T::Bell, 0.60f, 0.25f, 0.8f },
+              { { T::Drone, 0.35f, 0.70f, 1.4f }, { T::Chimes, 0.72f, 0.45f, 1.0f }, { T::Bowl, 0.60f, 0.25f, 0.8f },
                 { T::Shade, 0.30f, 0.55f, 1.1f }, { T::Shade, 0.75f, 0.35f, 0.7f } } },
         };
         return presets;

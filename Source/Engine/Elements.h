@@ -13,12 +13,12 @@ namespace scape
 enum class ElementType : int
 {
     Drone = 0,
-    Bell,
+    Bowl,
     Pluck,
     Bass,
     Shimmer,
-    Wind,
-    Pulse,
+    Chimes,
+    Pad,
     Shade,
     Spark,
     NumTypes
