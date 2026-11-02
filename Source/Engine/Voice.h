@@ -108,9 +108,12 @@ private:
     float activity = 0.0f, activityDecay = 0.999f;
     float sendRev = 0.4f, sendDly = 0.1f, typeGain = 0.1f;
     float curRev = 0, curDly = 0, curGl = 0.7f, curGr = 0.7f;
+    dsp::Svf voiceLpL, voiceLpR;
+    bool voiceFilterOn = false;
 
-    inline void emit (const VoiceBuses& b, int i, float l, float r) const noexcept
+    inline void emit (const VoiceBuses& b, int i, float l, float r) noexcept
     {
+        if (voiceFilterOn) { l = voiceLpL.lowpass (l); r = voiceLpR.lowpass (r); }
         b.dryL[i] += l;          b.dryR[i] += r;
         b.revL[i] += l * curRev; b.revR[i] += r * curRev;
         b.dlyL[i] += l * curDly; b.dlyR[i] += r * curDly;

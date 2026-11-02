@@ -76,24 +76,36 @@ element has its own random seed, so no two placements behave the same way.
 
 **Knobs:** Activity, Brightness, Tempo, Reverb, Echo and Volume. All of them can be automated in a DAW.
 
-## Sound controls per engine
+## Synth controls per engine
 
-The **Sounds** tab in the right sidebar gives every engine its own page. Pick an engine from the
-icon row, or just click an element on the canvas or a palette slot. Each page has 8 knobs that apply
-to every element of that type:
+The **Sounds** tab in the right sidebar gives every engine its own synth page. Pick an engine from
+the icon row, or click an element on the canvas or a palette slot. Every engine has the same six
+core controls, plus two that are specific to it:
 
-| Engine | Shared | Own controls |
-|---|---|---|
-| Drone | Level, Tone, Space (reverb send), Echo (echo send) | Detune, Breath, Sub, Glide |
-| Bell | " | Decay, Metal (FM ratio), Density, Octave |
-| Pluck | " | Decay, Density, Speed, Octave |
-| Bass | " | Drive, Attack, Walk, Octave |
-| Shimmer | " | Rate, Length, Spread, Octave |
-| Wind | " | Resonance, Air, Gusts, Octave |
-| Pulse | " | Decay, Density, Pattern (hits per bar), Octave |
+| Control | What it does |
+|---|---|
+| **Level** | Volume of this engine |
+| **Cutoff** | Low-pass filter (60 Hz to 20 kHz). Lower it to darken the sound |
+| **Resonance** | Emphasis at the cutoff, from smooth to whistling. Works with Cutoff |
+| **Attack** | How slowly the sound swells in (0.2 to 6.6 s) |
+| **Release** | How long it rings out after you remove it (0.2 to 4.2 s), and note decay |
+| **Octave** | Transposes the engine by up to two octaves |
+
+Engine-specific controls:
+
+| Engine | Specific controls |
+|---|---|
+| Drone | Detune (oscillator spread), Sub (sub-octave level) |
+| Bell | Metal (FM ratio, from pure tones to clangorous), Density |
+| Pluck | Density, Speed (how fast a figure's notes follow each other) |
+| Bass | Drive (saturation), Walk (how often it steps to the fifth) |
+| Shimmer | Rate (grains per second), Spread (stereo scatter) |
+| Wind | Gusts, Air (breathy, unpitched noise) |
+| Pulse | Pattern (hits per bar), Density |
 
 All 56 controls can be automated in a DAW and saved in presets. **Drag any LFO onto any of these
-knobs** to animate it. The LFO target menu also lists them, grouped by engine.
+knobs** to animate it, such as sweeping Cutoff for a classic filter wobble. The LFO target menu lists
+them grouped by engine.
 
 ## Living visuals
 
@@ -111,10 +123,10 @@ While the music plays, the canvas visualises it:
   the current chord.
 - **Shade** zones slow particles and tint them violet. **Spark** zones speed them up and brighten them.
 
-The visuals follow the controls, including whatever the LFOs are doing at that moment. Tone shifts an
-engine's hue, Level sets how much it emits, Space and Echo make ripples last longer and repeat,
-Reverb lengthens the trails, Brightness changes colour intensity and Granular breaks particles into
-fragments. On the XY pad, **Wash/Dub Echo** stretch the trails, **Crush** pixelates the particles
+The visuals follow the controls, including whatever the LFOs are doing at that moment. Cutoff shifts an
+engine's hue, Level sets how much it emits, Release makes ripples and particles last longer, Reverb
+lengthens the trails, Brightness changes colour intensity and Granular breaks particles into fragments.
+Each sounding element also glows with a halo that pulses with its activity. On the XY pad, **Wash/Dub Echo** stretch the trails, **Crush** pixelates the particles
 and **Warble** makes them wobble. The **Visuals** knob sets the overall intensity (0 = off).
 
 ## XY effects pad

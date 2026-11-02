@@ -5,7 +5,7 @@ using namespace scape;
 
 namespace
 {
-    constexpr int maxParticles = 1400;
+    constexpr int maxParticles = 2600;
     constexpr int maxRipples = 160;
     constexpr float trailScale = 0.5f;   // the trail layer is half resolution (soft, cheap)
 
@@ -43,7 +43,7 @@ void VisualField::spawnRipples (const ElementVisual& e, const VisualContext& ctx
     lastRippleTime[(size_t) e.index] = time;
 
     const auto& vp = ctx.voice[(size_t) e.type];
-    const float space = vp[2], echo = vp[3], level = vp[0];
+    const float space = vp[kRelease], echo = ctx.echo, level = vp[0];
     const auto col = colourFor (e.type, ctx);
 
     // Echo control -> repeated, fainter ripples (and the global echo adds a few more).
@@ -68,7 +68,7 @@ void VisualField::emit (const ElementVisual& e, const VisualContext& ctx, float 
 {
     if (! isSound (e.type)) return;
     const auto& vp = ctx.voice[(size_t) e.type];
-    static constexpr float baseRate[kNumSoundTypes] = { 9.0f, 2.0f, 3.0f, 3.0f, 22.0f, 26.0f, 3.0f };
+    static constexpr float baseRate[kNumSoundTypes] = { 16.0f, 3.5f, 5.0f, 5.0f, 34.0f, 40.0f, 5.0f };
 
     const float rate = baseRate[e.type] * (0.25f + e.activity) * (0.4f + ctx.activity) * (0.3f + 1.2f * vp[0])
                        * ctx.amount * (ctx.playing ? 1.0f : 0.0f) * (1.0f + ctx.grainMix * 1.5f);
@@ -93,12 +93,12 @@ void VisualField::emit (const ElementVisual& e, const VisualContext& ctx, float 
 
         switch ((ElementType) e.type)
         {
-            case ElementType::Drone:   p.v = dir * 12.0f + tangent * 22.0f; p.size = 2.5f + 2.0f * rng.nextFloat(); p.maxLife = 5.0f + 3.0f * vp[5]; break;
+            case ElementType::Drone:   p.v = dir * 12.0f + tangent * 22.0f; p.size = 2.5f + 2.0f * rng.nextFloat(); p.maxLife = 5.0f + 3.0f * vp[4]; break;
             case ElementType::Bell:    p.v = dir * (50.0f + 60.0f * rng.nextFloat()); p.size = 1.6f; p.maxLife = 1.5f + 2.0f * vp[4]; break;
             case ElementType::Pluck:   p.v = dir * (70.0f + 50.0f * vp[6]); p.size = 1.4f; p.maxLife = 1.2f + 2.0f * vp[4]; break;
             case ElementType::Bass:    p.v = dir * 10.0f; p.size = 7.0f + 6.0f * rng.nextFloat() * (0.5f + vp[4]); p.maxLife = 2.5f; break;
-            case ElementType::Shimmer: p.v = dir * (20.0f + 40.0f * rng.nextFloat()); p.size = 1.0f + rng.nextFloat(); p.maxLife = 1.0f + 1.5f * vp[5]; break;
-            case ElementType::Wind:    p.v = tangent * (30.0f + 50.0f * vp[6]); p.size = 1.2f; p.maxLife = 4.0f + 3.0f * vp[5]; break;
+            case ElementType::Shimmer: p.v = dir * (20.0f + 40.0f * rng.nextFloat()); p.size = 1.0f + rng.nextFloat(); p.maxLife = 1.0f + 1.5f * vp[4]; break;
+            case ElementType::Wind:    p.v = tangent * (30.0f + 50.0f * vp[6]); p.size = 1.2f; p.maxLife = 4.0f + 3.0f * vp[7]; break;
             case ElementType::Pulse:   p.v = dir * 30.0f; p.size = 2.2f; p.maxLife = 1.0f + 1.5f * vp[4]; break;
             case ElementType::Shade:
             case ElementType::Spark:
@@ -235,7 +235,7 @@ void VisualField::update (float dt, const std::vector<ElementVisual>& elements, 
             const auto mid = ra.c + u * aa;
             const Point<float> perp (-u.y, u.x);
             const auto c = ra.colour.interpolatedWith (rb.colour, 0.5f).brighter (0.3f);
-            const float s = 2.0f + 3.0f * jmin (ra.life / ra.maxLife, rb.life / rb.maxLife);
+            const float s = 3.5f + 5.0f * jmin (ra.life / ra.maxLife, rb.life / rb.maxLife);
             sparks.push_back ({ mid + perp * h, c, s });
             sparks.push_back ({ mid - perp * h, c, s });
         }
@@ -263,7 +263,7 @@ void VisualField::drawIntoTrail (const VisualContext& ctx)
     for (const auto& p : particles)
     {
         const float lifeT = p.life / p.maxLife;
-        const float alpha = jlimit (0.0f, 1.0f, lifeT * (p.style == (int) ElementType::Bass ? 0.12f : 0.7f) * amount);
+        const float alpha = jlimit (0.0f, 1.0f, lifeT * (p.style == (int) ElementType::Bass ? 0.18f : 0.95f) * amount);
         auto pos = p.p;
         if (grid > 0.5f) pos = { std::round (pos.x / grid) * grid, std::round (pos.y / grid) * grid };
         g.setColour (p.colour.withMultipliedAlpha (alpha));
@@ -273,7 +273,7 @@ void VisualField::drawIntoTrail (const VisualContext& ctx)
         else if (grid > 0.5f)
             g.fillRect (Rectangle<float> (p.size * 1.6f, p.size * 1.6f).withCentre (pos));
         else
-            g.fillEllipse (Rectangle<float> (p.size, p.size).withCentre (pos));
+            g.fillEllipse (Rectangle<float> (p.size * 1.35f, p.size * 1.35f).withCentre (pos));
     }
 
     // Drones trace slowly rotating rose curves; with the trails these grow into spirographs.
@@ -282,7 +282,7 @@ void VisualField::drawIntoTrail (const VisualContext& ctx)
         if (e.type != (int) ElementType::Drone) continue;
         const auto& vp = ctx.voice[0];
         const int petals = 3 + (ctx.chordRoot % 5);
-        const float rot = time * (0.05f + 0.25f * vp[5]) + (float) (e.seed % 100) * 0.06f;
+        const float rot = time * (0.05f + 0.25f * vp[4]) + (float) (e.seed % 100) * 0.06f;
         const float R = e.radius * (2.0f + 1.6f * e.activity) * (0.8f + 0.5f * vp[4]);
         Path rose;
         for (int k = 0; k <= 120; ++k)
@@ -292,7 +292,7 @@ void VisualField::drawIntoTrail (const VisualContext& ctx)
             const auto pt = e.pos + Point<float> (std::cos (th + rot), std::sin (th + rot)) * rr;
             if (k == 0) rose.startNewSubPath (pt); else rose.lineTo (pt);
         }
-        g.setColour (colourFor (0, ctx).withMultipliedAlpha (0.08f * amount * (0.4f + e.activity)));
+        g.setColour (colourFor (0, ctx).withMultipliedAlpha (0.16f * amount * (0.4f + e.activity)));
         g.strokePath (rose, PathStrokeType (1.2f));
     }
 }
@@ -303,7 +303,7 @@ void VisualField::drawRipples (Graphics& g) const
     for (const auto& r : ripples)
     {
         if (r.delay > 0.0f) continue;
-        const float alpha = jlimit (0.0f, 1.0f, r.life / r.maxLife) * 0.5f * amount;
+        const float alpha = jlimit (0.0f, 1.0f, r.life / r.maxLife) * 0.85f * amount;
         g.setColour (r.colour.withMultipliedAlpha (alpha));
         if (r.style == (int) ElementType::Pulse)
             g.drawRect (Rectangle<float> (r.radius * 2.0f, r.radius * 2.0f).withCentre (r.c), r.width);
@@ -330,6 +330,17 @@ void VisualField::paintBehind (Graphics& g)
         g.setOpacity (1.0f);
         g.setImageResamplingQuality (Graphics::mediumResamplingQuality);
         g.drawImage (trail, Rectangle<float> (0.0f, 0.0f, (float) width, (float) height));
+    }
+
+    // Glowing halos: each sounding element is wrapped in a light that pulses with its activity.
+    for (const auto& e : current)
+    {
+        if (! isSound (e.type)) continue;
+        const auto col = colourFor (e.type, lastCtx);
+        const float R = e.radius * (2.2f + 2.5f * e.activity + 0.6f * std::sin (time * 1.7f + (float) e.index));
+        const float a = lastCtx.amount * (0.12f + 0.4f * e.activity);
+        g.setGradientFill (ColourGradient (col.withAlpha (a), e.pos.x, e.pos.y, col.withAlpha (0.0f), e.pos.x + R, e.pos.y, true));
+        g.fillEllipse (e.pos.x - R, e.pos.y - R, R * 2.0f, R * 2.0f);
     }
 
     drawRipples (g);
@@ -373,7 +384,7 @@ void VisualField::paintFront (Graphics& g)
     if (lastCtx.amount <= 0.0f) return;
     for (const auto& s : sparks)
     {
-        g.setColour (s.c.withMultipliedAlpha (0.8f * lastCtx.amount));
+        g.setColour (s.c.withMultipliedAlpha (1.0f * lastCtx.amount));
         Path star;
         star.addStar (s.p, 4, s.s * 0.3f, s.s, time);
         g.fillPath (star);

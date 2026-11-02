@@ -51,6 +51,7 @@ void Voice::begin (const ElementSnapshot& e)
     activity = 0.0f;
 
     fade.reset (0.0f);
+    voiceLpL.reset(); voiceLpR.reset();
     levelSmooth.setTime (0.08f, sr);
     levelSmooth.reset (size);
     panSmooth.setTime (0.08f, sr);
@@ -129,11 +130,21 @@ void Voice::update (const ElementSnapshot& e, const VoiceMods& m, const VoicePar
     x = e.x; y = e.y; size = e.size;
     mods = m;
     vp = params;
-    mods.brightness = std::clamp (m.brightness + (vp[1] - 0.5f), 0.0f, 1.0f);   // Tone
+
+    // Universal synth controls: envelope times and the per-voice low-pass filter.
+    fadeInCoeff  = std::exp (-1.0f / (attackSecondsFrom (vp[kAttack]) * sr));
+    fadeOutCoeff = std::exp (-1.0f / (releaseSecondsFrom (vp[kRelease]) * sr));
+    voiceFilterOn = vp[kCutoff] < 0.999f;
+    if (voiceFilterOn)
+    {
+        const float cut = cutoffHzFrom (vp[kCutoff]), q = resonanceQFrom (vp[kResonance]);
+        voiceLpL.set (cut, q, sr);
+        voiceLpR.set (cut, q, sr);
+    }
 
     switch (type)
     {
-        case ElementType::Drone: droneFreq.setTime (0.05f + 4.0f * vp[7] * vp[7], sr); break;
+        case ElementType::Drone: droneFreq.setTime (0.86f, sr); break;
         case ElementType::Bell:
         case ElementType::Pluck:
         case ElementType::Bass:
@@ -191,7 +202,7 @@ void Voice::onTick (const VoiceContext& ctx) noexcept
 
         case ElementType::Bell:
         {
-            if ((ctx.tick & 1) == 0 && rng.chance ((0.04f + 0.24f * act) * std::sqrt (size) * 2.0f * vp[6]))
+            if ((ctx.tick & 1) == 0 && rng.chance ((0.04f + 0.24f * act) * std::sqrt (size) * 2.0f * vp[7]))
                 triggerBell (ctx);
             break;
         }
@@ -206,14 +217,14 @@ void Voice::onTick (const VoiceContext& ctx) noexcept
                     ++motifPos;
                 }
             }
-            else if ((ctx.tick & 1) == 0 && rng.chance ((0.02f + 0.14f * act) * 2.0f * vp[5]))
+            else if ((ctx.tick & 1) == 0 && rng.chance ((0.02f + 0.14f * act) * 2.0f * vp[6]))
             {
                 motifLength = 3 + rng.nextInt (4);
                 const int start = ctx.chordRoot + 2 * rng.nextInt (3);
                 const int dir = rng.chance (0.5f) ? 1 : -1;
                 const int stepSize = rng.chance (0.3f) ? 2 : 1;
                 // Speed: slow figures (3 ticks apart) .. fast (1 tick apart), with a little variety.
-                int spacing = vp[6] < 0.33f ? 3 : (vp[6] < 0.66f ? 2 : 1);
+                int spacing = vp[7] < 0.33f ? 3 : (vp[7] < 0.66f ? 2 : 1);
                 if (rng.chance (0.2f)) spacing = std::clamp (spacing + (rng.chance (0.5f) ? 1 : -1), 1, 4);
                 for (int i = 0; i < motifLength; ++i)
                 {
@@ -229,7 +240,7 @@ void Voice::onTick (const VoiceContext& ctx) noexcept
 
         case ElementType::Bass:
         {
-            const int octave = (y < 0.4f ? -1 : -2) + std::clamp (octaveFrom (vp[7]), -1, 2);
+            const int octave = (y < 0.4f ? -1 : -2) + std::clamp (octaveFrom (vp[5]), -1, 2);
             ++bassHoldTicks;
 
             if (newChord)
@@ -237,7 +248,7 @@ void Voice::onTick (const VoiceContext& ctx) noexcept
                 bassTarget = pitchHz (ctx, ctx.chordRoot, octave);
                 if (needsInitialPitch) bassFreq.reset (bassTarget);
                 bassEnvTarget = 1.0f;
-                bassEnv.setTime (0.05f + 3.0f * vp[5] * vp[5], sr);
+                bassEnv.setTime (attackSecondsFrom (vp[kAttack]) * 0.5f, sr);
                 bassHoldTicks = 0;
                 activity = 1.0f;
             }
@@ -247,7 +258,7 @@ void Voice::onTick (const VoiceContext& ctx) noexcept
                 bassEnv.setTime (4.0f, sr);
             }
 
-            if ((ctx.tick % 16) == 8 && rng.chance ((0.05f + 0.2f * act) * 2.0f * vp[6]))
+            if ((ctx.tick % 16) == 8 && rng.chance ((0.05f + 0.2f * act) * 2.0f * vp[7]))
             {
                 bassTarget = pitchHz (ctx, ctx.chordRoot + 4, octave);
                 bassReturnTick = ctx.tick + 4;
@@ -268,7 +279,7 @@ void Voice::onTick (const VoiceContext& ctx) noexcept
             if (newChord || rng.chance (0.03f))
             {
                 static constexpr int harmonics[] = { 2, 3, 4, 5, 6 };
-                const int oct = (y < 0.5f ? 0 : -1) + octaveFrom (vp[7]);
+                const int oct = (y < 0.5f ? 0 : -1) + octaveFrom (vp[5]);
                 const float baseL = pitchHz (ctx, ctx.chordRoot + 2 * rng.nextInt (3), oct);
                 const float baseR = pitchHz (ctx, ctx.chordRoot + 2 * rng.nextInt (3), oct);
                 windTargetL = std::clamp (baseL * (float) harmonics[rng.nextInt (5)] * 0.5f, 150.0f, 6000.0f);
@@ -283,10 +294,10 @@ void Voice::onTick (const VoiceContext& ctx) noexcept
         case ElementType::Pulse:
         {
             const int step = (int) ((ctx.tick + pulseRotation) % 16);
-            if (pulsePattern[(size_t) step] && rng.chance ((0.45f + 0.55f * act) * range (vp[5], 0.1f, 1.9f)))
+            if (pulsePattern[(size_t) step] && rng.chance ((0.45f + 0.55f * act) * range (vp[7], 0.1f, 1.9f)))
             {
                 static constexpr int seq[] = { 0, 2, 1, 2 };
-                const int octave = (y < 0.4f ? 1 : (y > 0.75f ? -1 : 0)) + octaveFrom (vp[7]);
+                const int octave = (y < 0.4f ? 1 : (y > 0.75f ? -1 : 0)) + octaveFrom (vp[5]);
                 const float f = pitchHz (ctx, ctx.chordRoot + 2 * seq[pulseStep++ & 3], octave);
                 pulseInc = f / sr;
                 const float peak = rng.range (0.6f, 1.0f);
@@ -319,12 +330,12 @@ void Voice::triggerBell (const VoiceContext& ctx) noexcept
 
     int degree = ctx.chordRoot + 2 * rng.nextInt (3);
     if (rng.chance (0.25f)) degree += 1;
-    const int octave = (y < 0.33f ? 2 : (y < 0.66f ? 1 : 0)) + octaveFrom (vp[7]);
+    const int octave = (y < 0.33f ? 2 : (y < 0.66f ? 1 : 0)) + octaveFrom (vp[5]);
     float f = pitchHz (ctx, degree, octave);
     while (f > sr * 0.2f) f *= 0.5f;
     const float vel = rng.range (0.45f, 1.0f);
     const float decay = rng.range (2.5f, 6.5f) * (0.7f + 0.3f * size) * range (vp[4], 0.25f, 1.75f);
-    bellRatio = fmRatioFrom (vp[5]);
+    bellRatio = fmRatioFrom (vp[6]);
 
     note->on = true;
     note->carInc = f / sr;
@@ -341,7 +352,7 @@ void Voice::triggerBell (const VoiceContext& ctx) noexcept
 void Voice::triggerPluck (const VoiceContext& ctx, int degree, float velocity) noexcept
 {
     auto& s = strings[(size_t) (nextString++ & 3)];
-    const int octave = (y < 0.33f ? 1 : (y < 0.66f ? 0 : -1)) + octaveFrom (vp[7]);
+    const int octave = (y < 0.33f ? 1 : (y < 0.66f ? 0 : -1)) + octaveFrom (vp[5]);
     const float f = std::clamp (pitchHz (ctx, degree, octave), 60.0f, 2000.0f);
 
     s.line.clear();
@@ -365,7 +376,7 @@ void Voice::spawnGrain (const VoiceContext& ctx) noexcept
     {
         if (g.on) continue;
 
-        int octave = 2 + (rng.chance (0.2f + 0.4f * mods.brightness) ? 1 : 0) - (y > 0.6f ? 1 : 0) + octaveFrom (vp[7]);
+        int octave = 2 + (rng.chance (0.2f + 0.4f * mods.brightness) ? 1 : 0) - (y > 0.6f ? 1 : 0) + octaveFrom (vp[5]);
         float f = pitchHz (ctx, ctx.chordRoot + 2 * rng.nextInt (4), octave) * (1.0f + rng.bipolar() * 0.002f);
         while (f > sr * 0.4f) f *= 0.5f;
 
@@ -373,9 +384,9 @@ void Voice::spawnGrain (const VoiceContext& ctx) noexcept
         g.inc = f / sr;
         g.phase = 0.0f;
         g.pos = 0.0f;
-        g.posInc = 1.0f / (rng.range (0.25f, 1.1f) * range (vp[5], 0.2f, 1.8f) * sr);
+        g.posInc = 1.0f / (rng.range (0.25f, 1.1f) * 1.0f * sr);
         g.amp = rng.range (0.4f, 1.0f);
-        panGains (basePan() + rng.bipolar() * vp[6], g.gl, g.gr);
+        panGains (basePan() + rng.bipolar() * vp[7], g.gl, g.gr);
         activity = std::max (activity, 0.6f * g.amp);
         return;
     }
@@ -393,8 +404,8 @@ void Voice::render (const VoiceBuses& b, int start, int n, const VoiceContext& c
     const float pan = advance (panSmooth, basePan(), n);
     panGains (pan, curGl, curGr);
 
-    curRev = sendRev * 2.0f * vp[2] + 0.45f * mods.reverbBoost;
-    curDly = sendDly * 2.0f * vp[3] + std::max (0.0f, vp[3] - 0.5f) * 0.5f;
+    curRev = sendRev + 0.45f * mods.reverbBoost;
+    curDly = sendDly;
 
     const float gain = g * typeGain * std::pow (level, 1.2f) * levelGainFrom (vp[0]);
 
@@ -423,10 +434,10 @@ void Voice::renderDrone (const VoiceBuses& b, int start, int n, float gain) noex
     static constexpr float baseDetune[4] = { 0.9948f, 0.9983f, 1.0023f, 1.0058f };
     float detune[4];
     for (int k = 0; k < 4; ++k)
-        detune[k] = 1.0f + (baseDetune[k] - 1.0f) * 2.2f * vp[4];
-    const float breathDepth = 0.6f * vp[5];
-    const float breathSpeed = range (vp[5], 0.3f, 2.2f);
-    const float subGain = 1.2f * vp[6];
+        detune[k] = 1.0f + (baseDetune[k] - 1.0f) * 2.2f * vp[6];
+    const float breathDepth = 0.3f;
+    const float breathSpeed = 1.0f;
+    const float subGain = 1.2f * vp[7];
     const float bright = mods.brightness;
 
     const float f0 = droneFreq.z > 1.0f ? droneFreq.z : droneTarget;
@@ -509,7 +520,7 @@ void Voice::renderPluck (const VoiceBuses& b, int start, int n, float gain) noex
 
 void Voice::renderBass (const VoiceBuses& b, int start, int n, float gain) noexcept
 {
-    const float bassDrive = 0.4f + 3.5f * vp[4];
+    const float bassDrive = 0.4f + 3.5f * vp[6];
     float gl, gr;
     panGains ((x * 2.0f - 1.0f) * 0.25f, gl, gr);
 
@@ -530,7 +541,7 @@ void Voice::renderBass (const VoiceBuses& b, int start, int n, float gain) noexc
 
 void Voice::renderShimmer (const VoiceBuses& b, int start, int n, float gain, const VoiceContext& ctx) noexcept
 {
-    const float rate = (1.0f + 7.0f * mods.activity) * range (vp[4], 0.1f, 1.9f);
+    const float rate = (1.0f + 7.0f * mods.activity) * range (vp[6], 0.1f, 1.9f);
 
     for (int i = start; i < start + n; ++i)
     {
@@ -559,7 +570,7 @@ void Voice::renderShimmer (const VoiceBuses& b, int start, int n, float gain, co
 
 void Voice::renderWind (const VoiceBuses& b, int start, int n, float gain) noexcept
 {
-    const float q = (9.0f + 10.0f * (1.0f - mods.brightness)) * range (vp[4], 0.25f, 1.75f);
+    const float q = 9.0f + 10.0f * (1.0f - mods.brightness);
     const float cl = advance (windCentreL, windTargetL, n);
     const float cr = advance (windCentreR, windTargetR, n);
     windBandL.set (cl, q, sr);
@@ -573,7 +584,7 @@ void Voice::renderWind (const VoiceBuses& b, int start, int n, float gain) noexc
     {
         const float gust = windGust.process (windGustTarget);
         const float nl = rng.bipolar(), nr = rng.bipolar();
-        const float air = windAir.lowpass ((nl + nr) * 0.5f) * 0.5f * vp[5];
+        const float air = windAir.lowpass ((nl + nr) * 0.5f) * 0.5f * vp[7];
         const float l = (windBandL.bandpass (nl) * normL + air) * gust * gain;
         const float r = (windBandR.bandpass (nr) * normR + air) * gust * gain;
         emit (b, i, l * curGl * 1.41f, r * curGr * 1.41f);

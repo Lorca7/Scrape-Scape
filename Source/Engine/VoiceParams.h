@@ -6,12 +6,18 @@
 namespace scape
 {
 
-// Per-engine sound controls. Every sound type has 8 controls, all stored as 0..1:
-// four shared (Level, Tone, Space, Echo) and four specific to that engine.
+// Per-engine synth controls. Every sound type has the same six universal controls
+// (Level, Cutoff, Resonance, Attack, Release, Octave) plus two engine-specific ones.
+// All stored as 0..1.
 constexpr int kNumSoundTypes = 7;      // Drone .. Pulse (modifiers have no sound)
 constexpr int kVoiceParams = 8;
 
-enum class VoiceParamDisplay { percent, octave, ratio, hits };
+enum VoiceParamIndex : int
+{
+    kLevel = 0, kCutoff, kResonance, kAttack, kRelease, kOctave, kSpecificA, kSpecificB
+};
+
+enum class VoiceParamDisplay { percent, octave, ratio, hits, hertz, seconds };
 
 struct VoiceParamSpec
 {
@@ -25,46 +31,34 @@ struct VoiceParamSpec
 inline const VoiceParamSpec& getVoiceParamSpec (int type, int index) noexcept
 {
     using D = VoiceParamDisplay;
-    static const VoiceParamSpec common[4] = {
-        { "level", "Level", 0.7f, D::percent, "Volume of this engine" },
-        { "tone",  "Tone",  0.5f, D::percent, "Darker / brighter than the global Brightness" },
-        { "space", "Space", 0.5f, D::percent, "How much goes into the reverb" },
-        { "echo",  "Echo",  0.5f, D::percent, "How much goes into the echo" },
+    static const VoiceParamSpec common[6] = {
+        { "level",     "Level",     0.7f, D::percent, "Volume of this engine" },
+        { "cutoff",    "Cutoff",    1.0f, D::hertz,   "Low-pass filter: lower it to darken the sound" },
+        { "resonance", "Resonance", 0.0f, D::percent, "Emphasis at the cutoff: from smooth to whistling. Works with Cutoff" },
+        { "attack",    "Attack",    0.5f, D::seconds, "How slowly the sound swells in" },
+        { "release",   "Release",   0.5f, D::seconds, "How long the sound rings out after it's removed (and note decay)" },
+        { "octave",    "Octave",    0.5f, D::octave,  "Transpose this engine up or down" },
     };
-    static const VoiceParamSpec specific[kNumSoundTypes][4] = {
+    static const VoiceParamSpec specific[kNumSoundTypes][2] = {
         { { "detune", "Detune", 0.5f, D::percent, "Width of the detuned oscillators" },
-          { "breath", "Breath", 0.5f, D::percent, "Depth and speed of the slow swell" },
-          { "sub",    "Sub",    0.5f, D::percent, "Level of the sub-octave" },
-          { "glide",  "Glide",  0.45f, D::percent, "How slowly it slides to new chord tones" } },
-        { { "decay",  "Decay",  0.5f, D::percent, "How long each bell rings" },
-          { "ratio",  "Metal",  0.5f, D::ratio,   "FM ratio: from pure tones to clangorous metal" },
-          { "density","Density",0.5f, D::percent, "How often bells strike" },
-          { "octave", "Octave", 0.5f, D::octave,  "Register shift" } },
-        { { "decay",  "Decay",  0.5f, D::percent, "String ring time" },
-          { "density","Density",0.5f, D::percent, "How often figures are played" },
-          { "speed",  "Speed",  0.5f, D::percent, "How fast the notes of a figure follow each other" },
-          { "octave", "Octave", 0.5f, D::octave,  "Register shift" } },
-        { { "drive",  "Drive",  0.4f, D::percent, "Warm saturation" },
-          { "attack", "Attack", 0.5f, D::percent, "How slowly notes swell in" },
-          { "walk",   "Walk",   0.5f, D::percent, "How often it steps to the fifth" },
-          { "octave", "Octave", 0.5f, D::octave,  "Register shift" } },
+          { "sub",    "Sub",    0.5f, D::percent, "Level of the sub-octave" } },
+        { { "ratio",   "Metal",   0.5f, D::ratio,   "FM ratio: from pure tones to clangorous metal" },
+          { "density", "Density", 0.5f, D::percent, "How often bells strike" } },
+        { { "density", "Density", 0.5f, D::percent, "How often figures are played" },
+          { "speed",   "Speed",   0.5f, D::percent, "How fast the notes of a figure follow each other" } },
+        { { "drive", "Drive", 0.4f, D::percent, "Saturation: from clean to warm and gritty" },
+          { "walk",  "Walk",  0.5f, D::percent, "How often it steps to the fifth" } },
         { { "rate",   "Rate",   0.5f, D::percent, "Grains per second" },
-          { "length", "Length", 0.5f, D::percent, "Grain length" },
-          { "spread", "Spread", 0.5f, D::percent, "Stereo scatter" },
-          { "octave", "Octave", 0.5f, D::octave,  "Register shift" } },
-        { { "reso",   "Resonance", 0.5f, D::percent, "How sharply the wind sings its notes" },
-          { "air",    "Air",    0.5f, D::percent, "Amount of breathy, unpitched air" },
-          { "gusts",  "Gusts",  0.5f, D::percent, "How lively the gusts are" },
-          { "octave", "Octave", 0.5f, D::octave,  "Register shift" } },
-        { { "decay",  "Decay",  0.5f, D::percent, "Length of each pulse" },
-          { "density","Density",0.5f, D::percent, "How many pattern steps actually play" },
-          { "pattern","Pattern",0.5f, D::hits,    "Hits per bar in the rhythm" },
-          { "octave", "Octave", 0.5f, D::octave,  "Register shift" } },
+          { "spread", "Spread", 0.5f, D::percent, "Stereo scatter" } },
+        { { "gusts", "Gusts", 0.5f, D::percent, "How lively the gusts are" },
+          { "air",   "Air",   0.5f, D::percent, "Amount of breathy, unpitched air" } },
+        { { "pattern", "Pattern", 0.5f, D::hits,    "Hits per bar in the rhythm" },
+          { "density", "Density", 0.5f, D::percent, "How many pattern steps actually play" } },
     };
 
     const int t = type < 0 ? 0 : (type >= kNumSoundTypes ? kNumSoundTypes - 1 : type);
     const int i = index < 0 ? 0 : (index >= kVoiceParams ? kVoiceParams - 1 : index);
-    return i < 4 ? common[i] : specific[t][i - 4];
+    return i < 6 ? common[i] : specific[t][i - 6];
 }
 
 using VoiceParamArray = std::array<float, kVoiceParams>;
@@ -79,11 +73,15 @@ inline AllVoiceParams defaultVoiceParams() noexcept
     return a;
 }
 
-// Helpers for the typed meanings of the 0..1 values.
-inline int octaveFrom (float v) noexcept        { return (int) std::lround (v * 4.0f - 2.0f); }     // -2..+2
-inline float fmRatioFrom (float v) noexcept     { return 1.0f + v * 4.0f; }                          // 1..5
-inline int pulseHitsFrom (float v) noexcept     { return 2 + (int) std::lround (v * 7.0f); }         // 2..9
-inline float levelGainFrom (float v) noexcept   { const float k = v / 0.7f; return k * k; }          // 0..~2
+// Typed meanings of the 0..1 values.
+inline int octaveFrom (float v) noexcept          { return (int) std::lround (v * 4.0f - 2.0f); }   // -2..+2
+inline float fmRatioFrom (float v) noexcept       { return 1.0f + v * 4.0f; }                        // 1..5
+inline int pulseHitsFrom (float v) noexcept       { return 2 + (int) std::lround (v * 7.0f); }       // 2..9
+inline float levelGainFrom (float v) noexcept     { const float k = v / 0.7f; return k * k; }        // 0..~2
+inline float cutoffHzFrom (float v) noexcept      { return 60.0f * std::pow (20000.0f / 60.0f, v); } // 60 Hz..20 kHz
+inline float resonanceQFrom (float v) noexcept    { return 0.7f + 11.0f * v; }
+inline float attackSecondsFrom (float v) noexcept { return 0.2f + 6.4f * v * v; }                    // 0.2..6.6 s
+inline float releaseSecondsFrom (float v) noexcept{ return 0.2f + 4.0f * v * v; }                    // 0.2..4.2 s
 inline float range (float v, float lo, float hi) noexcept { return lo + (hi - lo) * v; }
 
 } // namespace scape

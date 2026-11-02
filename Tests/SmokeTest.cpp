@@ -223,9 +223,16 @@ int main (int argc, char** argv)
         std::printf ("      engine levels: normal %.4f  muted %.6f  louder %.4f\n", normal, muted, loud);
         check (muted < normal * 0.05 && loud > normal * 1.2, "per-engine Level controls change the sound");
 
+        const double dark = measure ([&] (ScrapeScapeProcessor& pr)
+                                     { setP (pr, "bell_cutoff", 0.1f); setP (pr, "drone_cutoff", 0.1f); });
+        const double resonant = measure ([&] (ScrapeScapeProcessor& pr)
+                                         { setP (pr, "bell_resonance", 1.0f); setP (pr, "drone_resonance", 1.0f); });
+        std::printf ("      cutoff 0.1: %.4f  resonance 1.0: %.4f  (default %.4f)\n", dark, resonant, normal);
+        check (dark < normal * 0.9 && resonant > 0.0 && std::isfinite (resonant), "Cutoff darkens and Resonance stays stable");
+
         auto pr = std::make_unique<ScrapeScapeProcessor>();
         pr->prepareToPlay (sr, block);
-        const int target = scape::voiceTarget ((int) scape::ElementType::Bell, 5);   // Bell "Metal"
+        const int target = scape::voiceTarget ((int) scape::ElementType::Bell, 6);   // Bell "Metal"
         pr->setLfoTarget (2, target);
         setP (*pr, "lfo3_rate", 4.0f);
         setP (*pr, "lfo3_depth", 0.8f);

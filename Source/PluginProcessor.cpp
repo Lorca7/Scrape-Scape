@@ -81,13 +81,20 @@ juce::AudioProcessorValueTreeState::ParameterLayout ScrapeScapeProcessor::create
         for (int k = 0; k < kVoiceParams; ++k)
         {
             const auto& spec = getVoiceParamSpec (t, k);
-            auto display = [d = spec.display] (float v, int) -> String
+            const bool isAttack = juce::String (spec.id) == "attack";
+            auto display = [d = spec.display, isAttack] (float v, int) -> String
             {
                 switch (d)
                 {
                     case VoiceParamDisplay::octave: { const int o = octaveFrom (v); return o == 0 ? String ("0 oct") : (o > 0 ? "+" : "") + String (o) + " oct"; }
                     case VoiceParamDisplay::ratio:  return String (fmRatioFrom (v), 2) + ":1";
                     case VoiceParamDisplay::hits:   return String (pulseHitsFrom (v)) + " hits";
+                    case VoiceParamDisplay::hertz:  return String (roundToInt (cutoffHzFrom (v))) + " Hz";
+                    case VoiceParamDisplay::seconds:
+                    {
+                        // Show the envelope times this control actually sets (attack vs release).
+                        return String (isAttack ? attackSecondsFrom (v) : releaseSecondsFrom (v), 2) + " s";
+                    }
                     case VoiceParamDisplay::percent: break;
                 }
                 return String (roundToInt (v * 100.0f)) + "%";
