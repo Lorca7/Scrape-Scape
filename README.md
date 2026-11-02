@@ -80,7 +80,7 @@ element has its own random seed, so no two placements behave the same way.
 
 The **Sounds** tab in the right sidebar gives every engine its own synth page. Pick an engine from
 the icon row, or click an element on the canvas or a palette slot. Every engine has the same six
-core controls, plus two that are specific to it:
+core controls (the first row of knobs):
 
 | Control | What it does |
 |---|---|
