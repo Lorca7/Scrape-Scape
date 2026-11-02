@@ -43,6 +43,7 @@ void ImageOutliner::open (int elementType, const ElementSkin& s)
     skin.glyph = {};
     skin.encodedSource = s.encodedSource;
     type = jlimit (0, kNumElementTypes - 1, elementType);
+    displayImage = SkinTools::scaledHighQuality (skin.source, 1800);
     typeBox.setSelectedId (type + 1, dontSendNotification);
 
     TextButton* modes[] = { &freehandButton, &ellipseButton, &rectangleButton, &wholeButton };
@@ -133,7 +134,7 @@ void ImageOutliner::paint (Graphics& g)
     {
         g.setImageResamplingQuality (Graphics::mediumResamplingQuality);
         g.setOpacity (1.0f);   // images are drawn with the current colour's alpha
-        g.drawImage (skin.source, imageArea);
+        g.drawImage (displayImage, imageArea);
 
         // Dim everything, then redraw the selected part at full brightness.
         const auto path = SkinTools::outlinePath (skin, imageArea);
@@ -143,7 +144,7 @@ void ImageOutliner::paint (Graphics& g)
             Graphics::ScopedSaveState state (g);
             g.reduceClipRegion (path);
             g.setOpacity (1.0f);
-            g.drawImage (skin.source, imageArea);
+            g.drawImage (displayImage, imageArea);
         }
 
         g.setColour (Colours::white);

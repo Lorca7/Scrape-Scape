@@ -87,7 +87,7 @@ private:
     juce::TextButton renderButton { "Render WAV..." }, takesButton { "Takes" };
     juce::Label timeLabel;
 
-    std::unique_ptr<ModKnob> activity, brightness, tempo, reverb, echo, volume, visuals;
+    std::unique_ptr<ModKnob> activity, brightness, tempo, reverb, echo, volume, visuals, backdrop;
 
     // XY effects pad bar (under the canvas)
     juce::TextButton padModeButton;

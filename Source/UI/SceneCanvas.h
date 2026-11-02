@@ -4,6 +4,7 @@
 #include "Engine/Moods.h"
 #include "Skins.h"
 #include "VisualField.h"
+#include "Backdrop.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -12,7 +13,8 @@
 // Draws an element glyph. Shared by the canvas and the palette buttons.
 void drawElementGlyph (juce::Graphics& g, int type, juce::Point<float> centre, float radius,
                        float activity, float time, bool highlighted,
-                       const juce::Image* customImage = nullptr);
+                       const juce::Image* customImage = nullptr,
+                       const ElementSkin* directSkin = nullptr);
 
 // The interactive scene: click to place the selected element, drag to move,
 // scroll to resize, double-click / right-click to remove.
@@ -39,6 +41,7 @@ public:
 
     // Sound-reactive visuals + selection
     std::function<VisualContext()> getVisualContext;
+    std::function<float()> getBackdropAmount;
     std::function<void (int type)> onElementSelected;
     int getVisualParticleCount() const noexcept { return field.getParticleCount(); }
 
@@ -74,6 +77,7 @@ private:
     bool padDragging = false, lfoDragHover = false;
     GlyphCache glyphCache;
     VisualField field;
+    Backdrop backdrop;
     juce::Point<float> dragOffset;
     float time = 0.0f;
     juce::Colour topColour, bottomColour;

@@ -293,6 +293,75 @@ int main (int argc, char** argv)
                "custom images + outlines survive save/restore");
     }
 
+    // ---- Lossless picture sizing ---------------------------------------------------
+    {
+        // A 4000 px photo with an 8 px checkerboard: any blur would show up as grey.
+        auto bigFile = juce::File (outDir).getChildFile ("big-checker.png");
+        {
+            juce::Image big (juce::Image::RGB, 4000, 4000, true);
+            juce::Image::BitmapData bd (big, juce::Image::BitmapData::writeOnly);
+            for (int y = 0; y < 4000; ++y)
+                for (int x = 0; x < 4000; ++x)
+                    bd.setPixelColour (x, y, (((x / 8) + (y / 8)) & 1) ? juce::Colours::white : juce::Colours::black);
+            bigFile.deleteFile();
+            juce::FileOutputStream os (bigFile);
+            juce::PNGImageFormat().writeImageToStream (big, os);
+        }
+
+        ElementSkin bigSkin;
+        bigSkin.source = SkinTools::prepareSource (SkinTools::loadAnyImage (bigFile));
+        bigSkin.shape = ElementSkin::wholeImage;
+        bigSkin.encodedSource = SkinTools::encodeOriginalFile (bigFile);
+        check (bigSkin.source.getWidth() == 4000, "full-resolution photo is kept (4000 px)");
+
+        auto huge = SkinTools::renderGlyphAtSize (bigSkin, 4000);
+        bool exact = huge.getWidth() == 4000;
+        for (int k = 0; k < 200 && exact; ++k)
+        {
+            const int x = 3 + (k * 37) % 3990, y = 5 + (k * 53) % 3990;
+            const bool white = (((x / 8) + (y / 8)) & 1) != 0;
+            const auto px = huge.getPixelAt (x, y);
+            exact = white ? px.getBrightness() > 0.95f : px.getBrightness() < 0.05f;
+        }
+        check (exact, "picture rendered at 4000 px is pixel-sharp (no blur)");
+
+        // Direct drawing for giant on-screen sizes: a 600 px window into the picture drawn at
+        // full photo resolution (4000 px), and at 3x beyond it (12000 px) for information.
+        auto crispness = [&] (float drawnSize)
+        {
+            juce::Image view (juce::Image::ARGB, 600, 600, true);
+            {
+                juce::Graphics g (view);
+                const float off = -(drawnSize - 600.0f) * 0.5f;
+                SkinTools::drawDirect (g, bigSkin, juce::Rectangle<float> (off, off, drawnSize, drawnSize), 1.0f);
+            }
+            int crisp = 0, total = 0;
+            for (int y = 0; y < 600; y += 7)
+                for (int x = 0; x < 600; x += 7)
+                {
+                    const float b = view.getPixelAt (x, y).getBrightness();
+                    crisp += (b < 0.15f || b > 0.85f) ? 1 : 0;
+                    ++total;
+                }
+            return 100 * crisp / total;
+        };
+        const int atFull = crispness (4000.0f), beyond = crispness (12000.0f);
+        std::printf ("      giant direct draw: %d%% crisp at photo resolution, %d%% at 3x beyond it (smoothed)\n", atFull, beyond);
+        check (atFull >= 99, "giant pictures are drawn sharply straight from the photo");
+
+        auto pr = std::make_unique<ScrapeScapeProcessor>();
+        pr->getSkins().set ((int) scape::ElementType::Bass, bigSkin);
+        pr->getElements().setScale (1, 60.0f);
+        auto pf = juce::File (outDir).getChildFile ("big.scapepreset");
+        pr->savePreset (pf);
+        auto pr2 = std::make_unique<ScrapeScapeProcessor>();
+        pr2->loadPreset (pf);
+        check (pr2->getSkins().get ((int) scape::ElementType::Bass).source.getWidth() == 4000
+                   && std::abs (pr2->getElements().get (1).scale - 60.0f) < 1e-3f,
+               "presets keep the full-resolution photo and huge picture sizes");
+        std::printf ("      preset with 4000 px photo: %.0f KB\n", (double) pf.getSize() / 1024.0);
+    }
+
     // ---- Presets -----------------------------------------------------------------
     {
         auto presetFile = juce::File (outDir).getChildFile ("Test Scene.scapepreset");
@@ -390,6 +459,24 @@ int main (int argc, char** argv)
         std::printf ("      visual particles: %d\n", maxParticles);
         check (maxParticles > 50, "visual field emits particles from playing elements");
         check (snapshot (*editor, "editor-visuals.png"), "editor renders the visual field");
+
+        // Backdrop moods (+ a giant photo element drawn directly from the source).
+        if (canvas != nullptr)
+        {
+            fresh->getElements().setScale (0, 9.0f);
+            auto* moodParam = fresh->getParameters().getParameter ("mood");
+            for (int m : { 3, 5, 1 })
+            {
+                moodParam->setValueNotifyingHost (moodParam->convertTo0to1 ((float) m));
+                for (int frame = 0; frame < 120; ++frame)
+                {
+                    for (int i = 0; i < (int) (sr / 30.0 / block) + 1; ++i) fresh->processBlock (buffer, midi);
+                    canvas->advanceAnimation (1.0f / 30.0f);
+                }
+                const juce::String name = "backdrop-" + juce::String (scape::getMood (m).name).toLowerCase() + ".png";
+                check (snapshot (*editor, name.toRawUTF8()), ("backdrop renders for " + juce::String (scape::getMood (m).name)).toRawUTF8());
+            }
+        }
 
         for (auto* child : editor->getChildren())
             if (auto* o = dynamic_cast<ImageOutliner*> (child))

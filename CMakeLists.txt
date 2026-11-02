@@ -64,6 +64,7 @@ target_sources(ScrapeScape PRIVATE
     Source/UI/LfoPanel.cpp
     Source/UI/SoundPage.cpp
     Source/UI/VisualField.cpp
+    Source/UI/Backdrop.cpp
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
     Source/UI/SceneCanvas.cpp

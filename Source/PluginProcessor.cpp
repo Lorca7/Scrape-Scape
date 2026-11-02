@@ -45,6 +45,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout ScrapeScapeProcessor::create
                                                            [] (float v, int) { return String (v, 1) + " dB"; })));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "visuals", 1 }, "Visuals",
                                                        NormalisableRange<float> (0.0f, 1.0f), 0.8f, percent));
+    layout.add (std::make_unique<AudioParameterFloat> (ParameterID { "backdrop", 1 }, "Backdrop",
+                                                       NormalisableRange<float> (0.0f, 1.0f), 0.6f, percent));
 
     // ---- XY effects pad ----
     StringArray fxNames;

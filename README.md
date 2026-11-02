@@ -52,7 +52,7 @@ The first build downloads JUCE 8 automatically, so it takes a few minutes. The o
 | Place an element | Choose it in the palette, then click the canvas |
 | Move | Drag it. Height sets the register (higher = higher pitch), left/right sets the stereo position |
 | Resize (louder/softer, wider influence) | Scroll over it |
-| Resize just the picture | Click it, then drag its corner handle ⤡ |
+| Resize just the picture (any size) | Click it, then drag its corner handle ⤡, or Shift-scroll |
 | Remove | Double-click, right-click or ⌥-click |
 | Change the whole feel | **Mood**: Dawn, Tide, Ember, Glacier, Dusk or Night (key, scale, pace, colour) |
 | Random scene / start over | **Scatter** / **Clear** |
@@ -156,10 +156,33 @@ There are four LFOs, each with a shape (Sine, Triangle, Saw, Square, Random, Dri
 
 ## Picture size
 
-Select an element (click it) and drag its **corner handle ⤡** to resize the picture. This changes
-only how big it looks. Scrolling still changes the element's *presence* (its volume and its circle of
-influence). Pictures are kept at high resolution and redrawn from a cache at the exact on-screen pixel
-size, so they stay sharp at any size, including on Retina screens.
+Pictures can be **any size**, from tiny to many times bigger than the screen:
+
+- Click an element, then drag its **corner handle ⤡**. The handle always stays inside the canvas, so
+  you can shrink even a giant picture back down.
+- Or hold **Shift** (or **⌘**) and scroll over a picture.
+- **Double-click the handle** to reset the picture to its normal size.
+- **⌘-click** always places a new element, even on top of a big picture.
+
+Resizing a picture only changes how it looks. Plain scrolling still changes the element's sound
+*presence* (its volume and circle of influence).
+
+**Quality:** photos are kept at their original resolution (up to 8192 px), and presets store the
+original file. Every picture is drawn at its exact on-screen pixel size, including on Retina
+screens: from a high-quality cache up to 2048 px, and straight from the full-resolution photo above
+that. They stay pixel-sharp until they're displayed larger than the photo itself. Beyond that they're
+smoothly enlarged, because no extra detail exists in the file. Freehand outlines are stored as smooth
+curves, so edges stay clean at any size.
+
+## Backdrop
+
+The canvas background moves slowly. A soft aurora drifts across every mood, and each mood has its
+own pattern: **Dawn** sun rays, **Tide** drifting waves, **Ember** rising sparks, **Glacier** a
+glinting crystal lattice, **Dusk** slow overlapping ripples, **Night** twinkling stars and faint
+constellations. It breathes gently with how busy the music is, blooms softly on chord changes and
+crossfades when you change mood. The **Backdrop** knob sets its strength (0 = plain gradient).
+
+![night backdrop](docs/backdrop-night.png)
 
 ## Your own images
 

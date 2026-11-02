@@ -32,6 +32,10 @@ namespace SkinTools
 
     // PNG, JPEG and GIF everywhere; on macOS also TIFF, HEIC, BMP, WebP, PSD... via ImageIO.
     juce::Image loadAnyImage (const juce::File& f);
+    juce::Image loadAnyImage (const juce::MemoryBlock& data);
+
+    // Keeps the original file's bytes (base64) so presets store the photo at full quality.
+    juce::String encodeOriginalFile (const juce::File& f);
 
     // Downscales to a sensible working size and converts to ARGB.
     juce::Image prepareSource (const juce::Image& img);
@@ -41,6 +45,17 @@ namespace SkinTools
 
     // Cuts the outlined region out of the source (transparent outside the outline).
     juce::Image renderGlyph (const ElementSkin& skin);
+
+    // Same, rendered so its longest side is exactly maxDimension pixels (sharp at any size
+    // up to the photo's own resolution).
+    juce::Image renderGlyphAtSize (const ElementSkin& skin, int maxDimension);
+
+    // Draws the cut-out straight from the full-resolution source into `dest`
+    // (used for very large on-screen sizes, so nothing huge is ever cached).
+    void drawDirect (juce::Graphics& g, const ElementSkin& skin, juce::Rectangle<float> dest, float opacity);
+
+    // Aspect ratio (width / height) of the outlined region.
+    float glyphAspect (const ElementSkin& skin);
 
     // Fills in glyph + encodedSource from source/shape/outline.
     void finalise (ElementSkin& skin);
@@ -56,6 +71,7 @@ class SkinBank;
 class GlyphCache
 {
 public:
+    static constexpr int maxCachedSize = 2048;   // above this, draw directly from the source
     juce::Image get (const SkinBank& bank, int type, int pixelSize);
 
 private:

@@ -131,6 +131,8 @@ ScrapeScapeEditor::ScrapeScapeEditor (ScrapeScapeProcessor& p)
     volume     = makeKnob ("volume",     "Volume",     Colour (0xffe8ecf5), ModTarget::None,       LP::left);
     visuals    = makeKnob ("visuals",    "Visuals",    Colour (0xffc9a7ff), ModTarget::None,       LP::left);
     visuals->slider.setTooltip ("How strongly the canvas visualises the sound (particles, ripples, threads, trails)");
+    backdrop   = makeKnob ("backdrop",   "Backdrop",   Colour (0xff9fb4ff), ModTarget::None,       LP::left);
+    backdrop->slider.setTooltip ("Strength of the slowly moving background patterns (each mood has its own)");
 
     // ---- XY effects pad bar ----
     padModeButton.setButtonText ("XY Pad");
@@ -193,6 +195,11 @@ ScrapeScapeEditor::ScrapeScapeEditor (ScrapeScapeProcessor& p)
         }
     };
     canvas.getVisualContext = [this] { return buildVisualContext(); };
+    canvas.getBackdropAmount = [this]
+    {
+        auto* v = processor.getParameters().getRawParameterValue ("backdrop");
+        return v != nullptr ? v->load() : 0.6f;
+    };
 
     // ---- LFOs ----
     lfoPanel.getLfoValue = [this] (int i) { return processor.getLfoValue (i); };
@@ -416,8 +423,8 @@ void ScrapeScapeEditor::resized()
         b->setBounds (palette.removeFromLeft (buttonW).reduced (3, 0));
 
     bottom.removeFromTop (8);
-    ModKnob* knobs[] = { activity.get(), brightness.get(), tempo.get(), reverb.get(), echo.get(), volume.get(), visuals.get() };
-    const int knobW = bottom.getWidth() / 7;
+    ModKnob* knobs[] = { activity.get(), brightness.get(), tempo.get(), reverb.get(), echo.get(), volume.get(), visuals.get(), backdrop.get() };
+    const int knobW = bottom.getWidth() / 8;
     for (auto* k : knobs)
         k->setBounds (bottom.removeFromLeft (knobW));
 
@@ -746,6 +753,7 @@ void ScrapeScapeEditor::openImageFile (int type, const File& file)
     ElementSkin skin;
     skin.source = img;
     skin.shape = ElementSkin::freehand;
+    skin.encodedSource = SkinTools::encodeOriginalFile (file);   // store the photo at full quality
     openOutliner (type, skin);
 }
 

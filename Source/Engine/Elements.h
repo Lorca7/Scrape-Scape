@@ -45,7 +45,7 @@ struct ElementSnapshot
     int type = 0;
     float x = 0.5f, y = 0.5f;   // normalised canvas position (0..1, y = 0 is the top)
     float size = 1.0f;          // 0.4 .. 1.8  (sound presence + glyph size)
-    float scale = 1.0f;         // 0.3 .. 5    (picture size only, no effect on sound)
+    float scale = 1.0f;         // 0.3 .. 60   (picture size only, no effect on sound)
     std::uint32_t seed = 0;     // unique id + random seed for the voice
 };
 
@@ -66,7 +66,7 @@ public:
     };
 
     static constexpr float minSize = 0.4f, maxSize = 1.8f;
-    static constexpr float minScale = 0.3f, maxScale = 5.0f;
+    static constexpr float minScale = 0.3f, maxScale = 60.0f;
 
     int add (ElementType type, float x, float y, float size = 1.0f) noexcept;
     void remove (int index) noexcept;

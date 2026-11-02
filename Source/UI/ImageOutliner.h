@@ -37,7 +37,7 @@ private:
 
     juce::Rectangle<int> panel, imageBox, previewBox;
     juce::Rectangle<float> imageArea;
-    juce::Image preview;
+    juce::Image preview, displayImage;   // displayImage: screen-sized copy of the (possibly huge) photo
 
     juce::ComboBox typeBox;
     juce::TextButton freehandButton { "Freehand" }, ellipseButton { "Ellipse" },

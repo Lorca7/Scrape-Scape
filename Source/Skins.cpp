@@ -8,7 +8,7 @@ using namespace juce;
 
 namespace
 {
-    constexpr int maxSourceSize = 2048;
+    constexpr int maxSourceSize = 8192;   // keep photos at (nearly) full resolution
     constexpr int maxGlyphSize = 1024;
 
     bool hasTransparency (const Image& img)
@@ -43,7 +43,14 @@ namespace
     {
         MemoryBlock block;
         if (! block.fromBase64Encoding (base64)) return {};
-        return ImageFileFormat::loadFrom (block.getData(), block.getSize());
+        return SkinTools::loadAnyImage (block);
+    }
+
+    Rectangle<float> glyphRegion (const ElementSkin& skin)
+    {
+        const auto full = skin.source.getBounds().toFloat();
+        auto b = SkinTools::outlinePath (skin, full).getBounds().getIntersection (full);
+        return (b.getWidth() < 2.0f || b.getHeight() < 2.0f) ? full : b;
     }
 }
 
@@ -83,6 +90,27 @@ Image SkinTools::loadAnyImage (const File& f)
     return img;
 }
 
+Image SkinTools::loadAnyImage (const MemoryBlock& data)
+{
+    auto img = ImageFileFormat::loadFrom (data.getData(), data.getSize());
+   #if JUCE_MAC
+    if (! img.isValid())
+    {
+        MemoryInputStream in (data, false);
+        img = juce_loadWithCoreImage (in);
+    }
+   #endif
+    return img;
+}
+
+String SkinTools::encodeOriginalFile (const File& f)
+{
+    MemoryBlock data;
+    if (f.getSize() <= 40 * 1024 * 1024 && f.loadFileAsData (data))
+        return data.toBase64Encoding();
+    return {};
+}
+
 Image SkinTools::prepareSource (const Image& img)
 {
     if (! img.isValid()) return {};
@@ -110,9 +138,14 @@ Path SkinTools::outlinePath (const ElementSkin& skin, Rectangle<float> area)
         case ElementSkin::freehand:
             if (skin.outline.size() >= 3)
             {
-                p.startNewSubPath (toArea (skin.outline.front()));
-                for (size_t i = 1; i < skin.outline.size(); ++i)
-                    p.lineTo (toArea (skin.outline[i]));
+                // Smooth curve through the lasso points (quadratic segments between midpoints),
+                // so the outline stays smooth however large the picture is drawn.
+                const auto& pts = skin.outline;
+                const size_t n = pts.size();
+                auto mid = [&] (size_t i) { return (toArea (pts[i % n]) + toArea (pts[(i + 1) % n])) * 0.5f; };
+                p.startNewSubPath (mid (0));
+                for (size_t i = 1; i <= n; ++i)
+                    p.quadraticTo (toArea (pts[i % n]), mid (i));
                 p.closeSubPath();
                 return p;
             }
@@ -143,24 +176,70 @@ Path SkinTools::outlinePath (const ElementSkin& skin, Rectangle<float> area)
 Image SkinTools::renderGlyph (const ElementSkin& skin)
 {
     if (! skin.source.isValid()) return {};
+    const auto region = glyphRegion (skin);
+    return renderGlyphAtSize (skin, jmin (maxGlyphSize, (int) std::ceil (jmax (region.getWidth(), region.getHeight()))));
+}
 
-    const auto full = skin.source.getBounds().toFloat();
-    const auto path = outlinePath (skin, full);
-    auto bounds = path.getBounds().getIntersection (full);
-    if (bounds.getWidth() < 2.0f || bounds.getHeight() < 2.0f)
-        bounds = full;
+Image SkinTools::renderGlyphAtSize (const ElementSkin& skin, int maxDimension)
+{
+    if (! skin.source.isValid() || maxDimension < 1) return {};
 
-    const float scale = jmin (1.0f, (float) maxGlyphSize / jmax (bounds.getWidth(), bounds.getHeight()));
-    const int w = jmax (1, (int) std::ceil (bounds.getWidth() * scale));
-    const int h = jmax (1, (int) std::ceil (bounds.getHeight() * scale));
+    const auto region = glyphRegion (skin);
+    const float scale = (float) maxDimension / jmax (region.getWidth(), region.getHeight());
+    const int w = jmax (1, roundToInt (region.getWidth() * scale));
+    const int h = jmax (1, roundToInt (region.getHeight() * scale));
+
+    // Crop the region, resize it with progressive high-quality steps, then cut the outline out.
+    const auto cropRect = region.getSmallestIntegerContainer().getIntersection (skin.source.getBounds());
+    Image current = skin.source.getClippedImage (cropRect).createCopy();
+
+    // Large reductions: halve repeatedly first so fine detail is averaged, not skipped.
+    const int tw = jmax (1, roundToInt ((float) cropRect.getWidth() * scale));
+    const int th = jmax (1, roundToInt ((float) cropRect.getHeight() * scale));
+    if (scale < 1.0f)
+    {
+        while (current.getWidth() / 2 >= tw && current.getHeight() / 2 >= th)
+            current = current.rescaled (jmax (1, current.getWidth() / 2), jmax (1, current.getHeight() / 2),
+                                        Graphics::mediumResamplingQuality);
+        current = current.rescaled (tw, th, Graphics::highResamplingQuality);
+    }
+
+    // `current` now covers cropRect at (roughly) the target scale; map it into the output.
+    const float sx = (float) current.getWidth() / (float) cropRect.getWidth();
+    const float sy = (float) current.getHeight() / (float) cropRect.getHeight();
+    const auto sourceToOut = AffineTransform::translation (-region.getX(), -region.getY()).scaled (scale);
+    const auto imageToOut = AffineTransform::scale (1.0f / sx, 1.0f / sy)
+                                .translated ((float) cropRect.getX(), (float) cropRect.getY())
+                                .followedBy (sourceToOut);
 
     Image out (Image::ARGB, w, h, true);
     Graphics g (out);
-    const auto t = AffineTransform::translation (-bounds.getX(), -bounds.getY()).scaled (scale);
-    g.reduceClipRegion (path, t);
+    g.reduceClipRegion (outlinePath (skin, skin.source.getBounds().toFloat()), sourceToOut);
     g.setImageResamplingQuality (Graphics::highResamplingQuality);
-    g.drawImageTransformed (skin.source, t);
+    g.drawImageTransformed (current, imageToOut);
     return out;
+}
+
+float SkinTools::glyphAspect (const ElementSkin& skin)
+{
+    if (! skin.source.isValid()) return 1.0f;
+    const auto r = glyphRegion (skin);
+    return r.getWidth() / jmax (1.0f, r.getHeight());
+}
+
+void SkinTools::drawDirect (Graphics& g, const ElementSkin& skin, Rectangle<float> dest, float opacity)
+{
+    if (! skin.source.isValid()) return;
+    const auto region = glyphRegion (skin);
+    const auto fitted = RectanglePlacement (RectanglePlacement::centred).appliedTo (region, dest);
+    const float s = fitted.getWidth() / region.getWidth();
+    const auto t = AffineTransform::translation (-region.getX(), -region.getY()).scaled (s).translated (fitted.getX(), fitted.getY());
+
+    Graphics::ScopedSaveState state (g);
+    g.reduceClipRegion (outlinePath (skin, skin.source.getBounds().toFloat()), t);
+    g.setImageResamplingQuality (Graphics::highResamplingQuality);
+    g.setOpacity (opacity);
+    g.drawImageTransformed (skin.source, t);
 }
 
 void SkinTools::finalise (ElementSkin& skin)
@@ -297,12 +376,18 @@ Image GlyphCache::get (const SkinBank& bank, int type, int pixelSize)
     const auto full = bank.getGlyph (type);
     if (! full.isValid()) return {};
 
-    pixelSize = jlimit (8, 2048, (pixelSize + 3) / 4 * 4);   // quantise to keep the cache small
-    const int key = type * 4096 + pixelSize;
+    // Quantise (about 3% steps) so resizing doesn't render a new image every pixel.
+    const int step = jmax (4, pixelSize / 32);
+    pixelSize = jlimit (8, maxCachedSize, (pixelSize + step / 2) / step * step);
+    const int key = type * 8192 + pixelSize;
     if (auto it = cache.find (key); it != cache.end())
         return it->second;
+    if (cache.size() > 48) cache.clear();
 
-    auto img = SkinTools::scaledHighQuality (full, pixelSize);
+    // Small sizes come from the 1024 px cut-out; bigger ones are rendered from the full-resolution photo.
+    const int fullMax = jmax (full.getWidth(), full.getHeight());
+    auto img = pixelSize <= fullMax ? SkinTools::scaledHighQuality (full, pixelSize)
+                                    : SkinTools::renderGlyphAtSize (bank.get (type), pixelSize);
     cache[key] = img;
     return img;
 }

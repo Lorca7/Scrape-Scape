@@ -8,7 +8,7 @@ using namespace scape;
 
 //==============================================================================
 void drawElementGlyph (Graphics& g, int type, Point<float> c, float r, float activity, float time, bool highlighted,
-                       const Image* customImage)
+                       const Image* customImage, const ElementSkin* directSkin)
 {
     const auto& info = getElementInfo (type);
     const Colour col (info.colour);
@@ -21,6 +21,19 @@ void drawElementGlyph (Graphics& g, int type, Point<float> c, float r, float act
                              col.withAlpha (0.0f), c.x + glowR, c.y, true);
         g.setGradientFill (glow);
         g.fillEllipse (c.x - glowR, c.y - glowR, glowR * 2.0f, glowR * 2.0f);
+    }
+
+    if (directSkin != nullptr && directSkin->source.isValid())
+    {
+        // Very large: draw straight from the full-resolution photo (only the visible part is processed).
+        const float box = r * 2.6f;
+        SkinTools::drawDirect (g, *directSkin, Rectangle<float> (box, box).withCentre (c), 0.85f + 0.15f * a);
+        if (highlighted)
+        {
+            g.setColour (Colours::white.withAlpha (0.6f));
+            g.drawRect (Rectangle<float> (box, box).withCentre (c), 1.0f);
+        }
+        return;
     }
 
     if (customImage != nullptr && customImage->isValid())
@@ -239,6 +252,11 @@ void SceneCanvas::advanceAnimation (float seconds)
         }
         field.setBounds (getWidth(), getHeight());
         field.update (seconds, list, getVisualContext());
+
+        float energy = 0.0f;
+        for (auto& v : list) energy += v.activity;
+        backdrop.update (seconds, getMoodIndex ? getMoodIndex() : 0, getChordRoot ? getChordRoot() : 0,
+                         list.empty() ? 0.0f : energy / (float) list.size() * 1.4f);
     }
 
     // Ease the background towards the current mood's colours.
@@ -294,6 +312,14 @@ void SceneCanvas::paintBackground (Graphics& g)
     auto bounds = getLocalBounds().toFloat();
     g.setGradientFill (ColourGradient (topColour, 0, 0, bottomColour, 0, bounds.getHeight(), false));
     g.fillRoundedRectangle (bounds, 12.0f);
+
+    {
+        Graphics::ScopedSaveState clip (g);
+        Path rounded;
+        rounded.addRoundedRectangle (bounds, 12.0f);
+        g.reduceClipRegion (rounded);
+        backdrop.paint (g, bounds, topColour, bottomColour, getBackdropAmount ? getBackdropAmount() : 0.6f);
+    }
 
     // A soft horizon glow that breathes slowly.
     const float glow = 0.08f + 0.04f * std::sin (time * 0.25f);
@@ -359,9 +385,19 @@ void SceneCanvas::paint (Graphics& g)
             act = 0.4f + 0.3f * std::sin (time * 1.3f + (float) i);
 
         const float r = radiusFor (e.type, e.size) * e.scale;
-        const auto img = glyphCache.get (skins, jlimit (0, kNumElementTypes - 1, e.type), roundToInt (r * 2.6f * physicalScale));
-        drawElementGlyph (g, e.type, c, r, act, time + (float) i, ! padMode && (i == hoverIndex || i == dragIndex),
-                          img.isValid() ? &img : nullptr);
+        const int type = jlimit (0, kNumElementTypes - 1, e.type);
+        const int pixelSize = roundToInt (r * 2.6f * physicalScale);
+        const bool highlight = ! padMode && (i == hoverIndex || i == dragIndex);
+        if (pixelSize > GlyphCache::maxCachedSize && skins.hasSkin (type))
+        {
+            const auto skin = skins.get (type);
+            drawElementGlyph (g, type, c, r, act, time + (float) i, highlight, nullptr, &skin);
+        }
+        else
+        {
+            const auto img = glyphCache.get (skins, type, pixelSize);
+            drawElementGlyph (g, type, c, r, act, time + (float) i, highlight, img.isValid() ? &img : nullptr);
+        }
 
         // Picture-size handle on the selected element.
         if (! padMode && (i == selectedIndex || i == resizeIndex))
@@ -429,7 +465,9 @@ void SceneCanvas::paint (Graphics& g)
 Point<float> SceneCanvas::handlePosition (const ElementSnapshot& e) const noexcept
 {
     const float half = radiusFor (e.type, e.size) * e.scale * 1.3f;
-    return toScreen (e.x, e.y).translated (half * 0.85f, half * 0.85f);
+    const auto p = toScreen (e.x, e.y).translated (half * 0.85f, half * 0.85f);
+    // Keep the handle reachable even when the picture is far bigger than the canvas.
+    return { jlimit (16.0f, (float) getWidth() - 16.0f, p.x), jlimit (16.0f, (float) getHeight() - 40.0f, p.y) };
 }
 
 void SceneCanvas::mouseDown (const MouseEvent& e)
@@ -457,7 +495,8 @@ void SceneCanvas::mouseDown (const MouseEvent& e)
         }
     }
 
-    const int hit = hitTestElement (p);
+    // Cmd/Ctrl-click always places a new element (handy on top of big pictures).
+    const int hit = e.mods.isCommandDown() ? -1 : hitTestElement (p);
 
     if (e.mods.isPopupMenu() || e.mods.isAltDown())
     {
@@ -566,6 +605,18 @@ void SceneCanvas::mouseExit (const MouseEvent&)
 void SceneCanvas::mouseDoubleClick (const MouseEvent& e)
 {
     if (isPadMode && isPadMode()) return;
+
+    if (selectedIndex >= 0)
+    {
+        const auto sel = bank.get (selectedIndex);
+        if (sel.active && handlePosition (sel).getDistanceFrom (e.position) < 11.0f)
+        {
+            bank.setScale (selectedIndex, 1.0f);   // double-click the handle: back to normal size
+            flash ("Picture size reset", 1.2f);
+            return;
+        }
+    }
+
     const int hit = hitTestElement (e.position);
     if (hit >= 0)
     {
@@ -582,6 +633,15 @@ void SceneCanvas::mouseWheelMove (const MouseEvent& e, const MouseWheelDetails& 
     if (hit >= 0)
     {
         const auto el = bank.get (hit);
+        if (e.mods.isShiftDown() || e.mods.isCommandDown())
+        {
+            // Shift/Cmd + scroll: picture size only (macOS turns Shift+scroll into horizontal scroll).
+            const float delta = std::abs (wheel.deltaY) > std::abs (wheel.deltaX) ? wheel.deltaY : wheel.deltaX;
+            bank.setScale (hit, el.scale * std::exp (delta * 0.8f));
+            selectedIndex = hit;
+            repaint();
+            return;
+        }
         bank.setSize (hit, el.size * (1.0f + wheel.deltaY * 0.6f));
         repaint();
     }
