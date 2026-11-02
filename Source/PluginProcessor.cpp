@@ -216,10 +216,10 @@ void ScrapeScapeProcessor::loadDefaultScene()
 {
     elements.clear();
     elements.add (ElementType::Drone,   0.28f, 0.58f, 1.2f);
-    elements.add (ElementType::Bass,    0.52f, 0.82f, 1.0f);
+    elements.add (ElementType::Pad,     0.55f, 0.80f, 1.0f);
     elements.add (ElementType::Bowl,    0.70f, 0.30f, 1.0f);
     elements.add (ElementType::Shimmer, 0.84f, 0.18f, 0.9f);
-    elements.add (ElementType::Shade,   0.18f, 0.40f, 0.9f);
+    elements.add (ElementType::Pulse,   0.20f, 0.35f, 0.8f);
 }
 
 void ScrapeScapeProcessor::scatterScene (juce::Random& random)
@@ -230,7 +230,7 @@ void ScrapeScapeProcessor::scatterScene (juce::Random& random)
     elements.add (ElementType::Drone, random.nextFloat() * 0.8f + 0.1f, 0.45f + random.nextFloat() * 0.35f,
                   0.8f + random.nextFloat() * 0.6f);
     if (random.nextBool())
-        elements.add (ElementType::Bass, random.nextFloat() * 0.8f + 0.1f, 0.75f + random.nextFloat() * 0.2f, 1.0f);
+        elements.add (ElementType::Pad, random.nextFloat() * 0.8f + 0.1f, 0.65f + random.nextFloat() * 0.25f, 1.0f);
 
     const int extras = 2 + random.nextInt (4);
     for (int i = 0; i < extras; ++i)
@@ -416,6 +416,8 @@ void ScrapeScapeProcessor::applyStateTree (const juce::ValueTree& source, bool i
         for (auto node : list)
         {
             if (slot >= kMaxElements) break;
+            const int type = (int) node.getProperty ("type", 0);
+            if (type < 0 || type >= kNumElementTypes) continue;   // e.g. Shade/Spark from older versions
             ElementSnapshot e;
             e.active = true;
             e.type = (int) node.getProperty ("type", 0);
@@ -519,20 +521,20 @@ namespace
         using T = ElementType;
         static const std::vector<FactoryPreset> presets = {
             { "First Light", 0, 0.45f, 0.65f, 62.0f, 0.55f, 0.30f,
-              { { T::Drone, 0.28f, 0.58f, 1.2f }, { T::Bass, 0.52f, 0.82f, 1.0f }, { T::Bowl, 0.70f, 0.30f, 1.0f },
-                { T::Shimmer, 0.84f, 0.18f, 0.9f }, { T::Spark, 0.76f, 0.24f, 0.8f } } },
+              { { T::Drone, 0.28f, 0.58f, 1.2f }, { T::Pulse, 0.52f, 0.82f, 1.0f }, { T::Bowl, 0.70f, 0.30f, 1.0f },
+                { T::Shimmer, 0.84f, 0.18f, 0.9f }, { T::Chimes, 0.76f, 0.24f, 0.8f } } },
             { "Undertow", 1, 0.35f, 0.45f, 54.0f, 0.65f, 0.40f,
-              { { T::Bass, 0.40f, 0.86f, 1.3f }, { T::Drone, 0.22f, 0.72f, 1.3f }, { T::Chimes, 0.68f, 0.55f, 1.1f },
-                { T::Pad, 0.80f, 0.40f, 0.8f }, { T::Shade, 0.30f, 0.70f, 1.2f } } },
+              { { T::Pulse, 0.40f, 0.86f, 1.3f }, { T::Drone, 0.22f, 0.72f, 1.3f }, { T::Chimes, 0.68f, 0.55f, 1.1f },
+                { T::Pad, 0.80f, 0.40f, 0.8f }, { T::Bowl, 0.30f, 0.70f, 1.2f } } },
             { "Embers", 2, 0.55f, 0.40f, 60.0f, 0.50f, 0.35f,
               { { T::Drone, 0.50f, 0.64f, 1.1f }, { T::Pluck, 0.25f, 0.45f, 1.0f }, { T::Pluck, 0.78f, 0.35f, 0.8f },
-                { T::Bass, 0.55f, 0.88f, 1.0f }, { T::Shade, 0.70f, 0.60f, 0.9f } } },
+                { T::Pulse, 0.55f, 0.88f, 1.0f }, { T::Pad, 0.70f, 0.60f, 0.9f } } },
             { "Glass Garden", 3, 0.60f, 0.80f, 70.0f, 0.60f, 0.45f,
               { { T::Bowl, 0.25f, 0.30f, 1.0f }, { T::Bowl, 0.70f, 0.22f, 0.8f }, { T::Shimmer, 0.50f, 0.15f, 1.0f },
-                { T::Pluck, 0.40f, 0.50f, 0.9f }, { T::Drone, 0.60f, 0.65f, 0.9f }, { T::Spark, 0.30f, 0.35f, 1.0f } } },
+                { T::Pluck, 0.40f, 0.50f, 0.9f }, { T::Drone, 0.60f, 0.65f, 0.9f }, { T::Chimes, 0.30f, 0.35f, 1.0f } } },
             { "Night Window", 5, 0.30f, 0.35f, 48.0f, 0.75f, 0.25f,
               { { T::Drone, 0.35f, 0.70f, 1.4f }, { T::Chimes, 0.72f, 0.45f, 1.0f }, { T::Bowl, 0.60f, 0.25f, 0.8f },
-                { T::Shade, 0.30f, 0.55f, 1.1f }, { T::Shade, 0.75f, 0.35f, 0.7f } } },
+                { T::Pad, 0.30f, 0.55f, 1.1f }, { T::Shimmer, 0.75f, 0.35f, 0.7f } } },
         };
         return presets;
     }

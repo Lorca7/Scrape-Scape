@@ -37,7 +37,7 @@ void VisualField::spawnRipples (const ElementVisual& e, const VisualContext& ctx
 {
     // Only struck sounds ripple; continuous ones (drone, shimmer, wind) show as particles.
     if (e.type != (int) ElementType::Bowl && e.type != (int) ElementType::Pluck
-        && e.type != (int) ElementType::Bass && e.type != (int) ElementType::Chimes)
+        && e.type != (int) ElementType::Pulse && e.type != (int) ElementType::Chimes)
         return;
     if (time - lastRippleTime[(size_t) e.index] < 0.3f) return;
     lastRippleTime[(size_t) e.index] = time;
@@ -53,9 +53,10 @@ void VisualField::spawnRipples (const ElementVisual& e, const VisualContext& ctx
         Ripple r;
         r.c = e.pos;
         r.radius = e.radius * 0.8f;
-        r.speed = (40.0f + 90.0f * strength) * (0.7f + 0.6f * level) * (e.type == (int) ElementType::Bass ? 0.6f : 1.0f);
+        r.speed = (40.0f + 90.0f * strength) * (0.7f + 0.6f * level) * 1.0f;
         r.maxLife = r.life = 0.8f + 2.2f * space + 0.8f * ctx.reverb;
-        r.width = e.type == (int) ElementType::Bass ? 6.0f : (e.type == (int) ElementType::Bowl ? 3.0f : 1.6f);
+        r.width = e.type == (int) ElementType::Pulse ? 1.4f : (e.type == (int) ElementType::Bowl ? 3.0f : 1.6f);
+        if (e.type == (int) ElementType::Pulse) { r.maxLife *= 0.45f; r.life = r.maxLife; }   // quick, light beats
         r.delay = (float) k * (0.22f + 0.25f * echo);
         r.colour = col.withMultipliedAlpha (std::pow (0.6f, (float) k));
         r.owner = e.index;
@@ -96,12 +97,10 @@ void VisualField::emit (const ElementVisual& e, const VisualContext& ctx, float 
             case ElementType::Drone:   p.v = dir * 12.0f + tangent * 22.0f; p.size = 2.5f + 2.0f * rng.nextFloat(); p.maxLife = 5.0f + 3.0f * vp[4]; break;
             case ElementType::Bowl:    p.v = tangent * (18.0f + 20.0f * rng.nextFloat()) + dir * 8.0f; p.size = 2.2f; p.maxLife = 3.0f + 4.0f * vp[4]; break;
             case ElementType::Pluck:   p.v = dir * (70.0f + 50.0f * vp[6]); p.size = 1.4f; p.maxLife = 1.2f + 2.0f * vp[4]; break;
-            case ElementType::Bass:    p.v = dir * 10.0f; p.size = 7.0f + 6.0f * rng.nextFloat() * (0.5f + vp[4]); p.maxLife = 2.5f; break;
+            case ElementType::Pulse:   p.v = dir * (30.0f + 30.0f * rng.nextFloat()); p.size = 2.2f; p.maxLife = 1.0f + 1.5f * vp[4]; break;
             case ElementType::Shimmer: p.v = dir * (20.0f + 40.0f * rng.nextFloat()); p.size = 1.0f + rng.nextFloat(); p.maxLife = 1.0f + 1.5f * vp[4]; break;
             case ElementType::Chimes:  p.v = Point<float> (dir.x * 25.0f, 30.0f + 40.0f * rng.nextFloat()); p.size = 1.5f; p.maxLife = 2.0f + 2.5f * vp[4]; break;
             case ElementType::Pad:     p.v = dir * 9.0f + tangent * 6.0f; p.size = 9.0f + 7.0f * rng.nextFloat(); p.maxLife = 4.0f + 3.0f * vp[4]; break;
-            case ElementType::Shade:
-            case ElementType::Spark:
             case ElementType::NumTypes: break;
         }
 
@@ -137,9 +136,7 @@ void VisualField::update (float dt, const std::vector<ElementVisual>& elements, 
         emit (e, ctx, dt);
     }
 
-    // Particle dynamics: drift, swirl around other elements, blend colours on close passes,
-    // slowed/tinted by Shade zones, energised by Spark zones.
-    const float minDim = (float) jmin (width, height);
+    // Particle dynamics: drift, swirl around other elements, blend colours on close passes.
     const float drag = std::pow (0.985f, dt * 60.0f);
     const float warble = ctx.fxType == 3 ? ctx.fxMix : 0.0f;
 
@@ -153,26 +150,6 @@ void VisualField::update (float dt, const std::vector<ElementVisual>& elements, 
             const auto d = e.pos - p.p;
             const float dist2 = d.x * d.x + d.y * d.y + 400.0f;
             const float dist = std::sqrt (dist2);
-
-            if (e.type == (int) ElementType::Shade || e.type == (int) ElementType::Spark)
-            {
-                const float zone = 0.3f * e.size * minDim;
-                if (dist < zone)
-                {
-                    const float k = 1.0f - dist / zone;
-                    if (e.type == (int) ElementType::Shade)
-                    {
-                        p.v *= 1.0f - 0.04f * k;
-                        p.colour = p.colour.interpolatedWith (Colour (getElementInfo (e.type).colour), 0.03f * k);
-                    }
-                    else
-                    {
-                        p.v *= 1.0f + 0.02f * k;
-                        p.colour = p.colour.brighter (0.01f * k);
-                    }
-                }
-                continue;
-            }
 
             if (e.index == p.owner) continue;
 
@@ -263,7 +240,7 @@ void VisualField::drawIntoTrail (const VisualContext& ctx)
     for (const auto& p : particles)
     {
         const float lifeT = p.life / p.maxLife;
-        const float alpha = jlimit (0.0f, 1.0f, lifeT * ((p.style == (int) ElementType::Bass || p.style == (int) ElementType::Pad) ? 0.14f : 0.95f) * amount);
+        const float alpha = jlimit (0.0f, 1.0f, lifeT * (p.style == (int) ElementType::Pad ? 0.14f : 0.95f) * amount);
         auto pos = p.p;
         if (grid > 0.5f) pos = { std::round (pos.x / grid) * grid, std::round (pos.y / grid) * grid };
         g.setColour (p.colour.withMultipliedAlpha (alpha));
@@ -305,7 +282,9 @@ void VisualField::drawRipples (Graphics& g) const
         if (r.delay > 0.0f) continue;
         const float alpha = jlimit (0.0f, 1.0f, r.life / r.maxLife) * 0.85f * amount;
         g.setColour (r.colour.withMultipliedAlpha (alpha));
-        if (r.style == (int) ElementType::Chimes)
+        if (r.style == (int) ElementType::Pulse)
+            g.drawRect (Rectangle<float> (r.radius * 2.0f, r.radius * 2.0f).withCentre (r.c), r.width);
+        else if (r.style == (int) ElementType::Chimes)
         {
             // A ring of glinting dots, like light catching swinging tubes.
             for (int k = 0; k < 10; ++k)

@@ -108,14 +108,24 @@ void drawElementGlyph (Graphics& g, int type, Point<float> c, float r, float act
             break;
         }
 
-        case ElementType::Bass:
+        case ElementType::Pulse:
         {
-            const auto rect = Rectangle<float> (r * 2.6f, r * 1.1f).withCentre (c);
-            ColourGradient grad (col.brighter (0.3f), rect.getX(), rect.getY(), col.darker (0.6f), rect.getX(), rect.getBottom(), false);
-            g.setGradientFill (grad);
-            g.fillRoundedRectangle (rect, r * 0.55f);
-            g.setColour (edge.withAlpha (0.7f));
-            g.drawRoundedRectangle (rect, r * 0.55f, stroke);
+            // A glowing disc carrying a pulse wave, with a ring that beats on each hit.
+            g.setGradientFill (ColourGradient (col.brighter (0.3f), c.x, c.y - r * 0.6f, col.darker (0.5f), c.x, c.y + r, false));
+            g.fillEllipse (c.x - r * 0.95f, c.y - r * 0.95f, r * 1.9f, r * 1.9f);
+            Path wave;
+            const float w = r * 1.3f, h = r * 0.42f, x0 = c.x - w * 0.5f;
+            wave.startNewSubPath (x0, c.y + h);
+            for (int k = 0; k < 3; ++k)
+            {
+                const float xa = x0 + w * (float) k / 3.0f, xb = xa + w * 0.11f, xc = xa + w / 3.0f;
+                wave.lineTo (xa, c.y - h); wave.lineTo (xb, c.y - h); wave.lineTo (xb, c.y + h); wave.lineTo (xc, c.y + h);
+            }
+            g.setColour (Colours::white.withAlpha (0.85f));
+            g.strokePath (wave, PathStrokeType (stroke * 1.2f, PathStrokeType::mitered, PathStrokeType::rounded));
+            const float beat = r * (1.05f + 0.5f * a);
+            g.setColour (edge.withAlpha (0.3f + 0.6f * a));
+            g.drawEllipse (c.x - beat, c.y - beat, beat * 2.0f, beat * 2.0f, stroke);
             break;
         }
 
@@ -168,32 +178,6 @@ void drawElementGlyph (Graphics& g, int type, Point<float> c, float r, float act
             }
             g.setColour (edge.withAlpha (0.55f));
             g.drawEllipse (c.x - r * 0.95f, c.y - r * 0.95f, r * 1.9f, r * 1.9f, stroke * 0.8f);
-            break;
-        }
-
-        case ElementType::Shade:
-        {
-            Path moon;
-            moon.addEllipse (c.x - r, c.y - r, r * 2, r * 2);
-            Path crescent (moon);
-            crescent.addEllipse (c.x - r * 0.45f, c.y - r * 1.15f, r * 2, r * 2);
-            crescent.setUsingNonZeroWinding (false);
-
-            Graphics::ScopedSaveState state (g);
-            g.reduceClipRegion (moon);
-            g.setColour (col.withAlpha (0.95f));
-            g.fillPath (crescent);
-            break;
-        }
-
-        case ElementType::Spark:
-        {
-            Path star;
-            star.addStar (c, 4, r * 0.3f, r * 1.05f, time * 0.5f);
-            g.setColour (fill);
-            g.fillPath (star);
-            g.setColour (Colours::white.withAlpha (0.8f));
-            g.fillEllipse (c.x - r * 0.18f, c.y - r * 0.18f, r * 0.36f, r * 0.36f);
             break;
         }
 
@@ -294,7 +278,7 @@ float SceneCanvas::radiusFor (int type, float size) const noexcept
     const float scale = (float) jmin (getWidth(), getHeight()) / 480.0f;
     float base = 15.0f;
     if (type == (int) ElementType::Drone) base = 24.0f;
-    if (type == (int) ElementType::Bass)  base = 18.0f;
+    if (type == (int) ElementType::Pulse) base = 17.0f;
     return base * size * jlimit (0.7f, 1.8f, scale);
 }
 
@@ -351,28 +335,6 @@ void SceneCanvas::paint (Graphics& g)
 {
     paintBackground (g);
 
-    // Modifier influence zones first, so they sit beneath everything.
-    for (int i = 0; i < kMaxElements; ++i)
-    {
-        const auto e = bank.get (i);
-        if (! e.active || ! getElementInfo (e.type).isModifier) continue;
-
-        const auto c = toScreen (e.x, e.y);
-        const float rx = 0.3f * e.size * (float) getWidth();
-        const float ry = 0.3f * e.size * (float) getHeight();
-        const Colour col (getElementInfo (e.type).colour);
-        g.setGradientFill (ColourGradient (col.withAlpha (0.14f), c.x, c.y, col.withAlpha (0.0f), c.x + rx, c.y, true));
-        g.fillEllipse (c.x - rx, c.y - ry, rx * 2, ry * 2);
-
-        Path ring;
-        ring.addEllipse (c.x - rx, c.y - ry, rx * 2, ry * 2);
-        Path dashed;
-        const float dashes[] = { 4.0f, 6.0f };
-        PathStrokeType (1.0f).createDashedStroke (dashed, ring, dashes, 2);
-        g.setColour (col.withAlpha (0.25f));
-        g.fillPath (dashed);
-    }
-
     {
         Graphics::ScopedSaveState clip (g);
         Path rounded;
@@ -392,9 +354,7 @@ void SceneCanvas::paint (Graphics& g)
 
         const float bob = std::sin (time * 0.6f + (float) (e.seed % 628) * 0.01f) * 2.0f;
         const auto c = toScreen (e.x, e.y).translated (0.0f, bob);
-        float act = bank.slot (i).activity.load();
-        if (getElementInfo (e.type).isModifier)
-            act = 0.4f + 0.3f * std::sin (time * 1.3f + (float) i);
+        const float act = bank.slot (i).activity.load();
 
         const float r = radiusFor (e.type, e.size) * e.scale;
         const int type = jlimit (0, kNumElementTypes - 1, e.type);

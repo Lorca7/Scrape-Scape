@@ -115,7 +115,7 @@ int main (int argc, char** argv)
     // ---- State round trip --------------------------------------------------
     proc->getElements().clear();
     proc->getElements().add (scape::ElementType::Pluck, 0.25f, 0.75f, 1.5f);
-    proc->getElements().add (scape::ElementType::Spark, 0.4f, 0.6f, 0.8f);
+    proc->getElements().add (scape::ElementType::Chimes, 0.4f, 0.6f, 0.8f);
     proc->getParameters().getParameter ("mood")->setValueNotifyingHost (1.0f);
     juce::MemoryBlock state;
     proc->getStateInformation (state);
@@ -300,6 +300,30 @@ int main (int argc, char** argv)
                "custom images + outlines survive save/restore");
     }
 
+    // ---- Presets from older versions (with Shade / Spark modifiers) --------------
+    {
+        auto pr = std::make_unique<ScrapeScapeProcessor>();
+        auto state = pr->createStateTree();
+        auto list = state.getChildWithName ("Elements");
+        list.removeAllChildren (nullptr);
+        for (int type : { 0, 7, 8, 1 })   // Drone, Shade(7), Spark(8), Bowl
+        {
+            juce::ValueTree node ("Element");
+            node.setProperty ("type", type, nullptr);
+            node.setProperty ("x", 0.5f, nullptr);
+            node.setProperty ("y", 0.5f, nullptr);
+            node.setProperty ("size", 1.0f, nullptr);
+            list.appendChild (node, nullptr);
+        }
+        auto pr2 = std::make_unique<ScrapeScapeProcessor>();
+        pr2->applyStateTree (state);
+        check (pr2->getElements().countActive() == 2 && pr2->getElements().get (0).type == 0
+                   && pr2->getElements().get (1).type == (int) scape::ElementType::Bowl,
+               "old presets load with Shade/Spark skipped");
+        check (scape::kNumElementTypes == 7 && juce::String (scape::getElementInfo (3).name) == "Pulse",
+               "palette has the 7 engines with Pulse in place of Bass");
+    }
+
     // ---- Lossless picture sizing ---------------------------------------------------
     {
         // A 4000 px photo with an 8 px checkerboard: any blur would show up as grey.
@@ -357,13 +381,13 @@ int main (int argc, char** argv)
         check (atFull >= 99, "giant pictures are drawn sharply straight from the photo");
 
         auto pr = std::make_unique<ScrapeScapeProcessor>();
-        pr->getSkins().set ((int) scape::ElementType::Bass, bigSkin);
+        pr->getSkins().set ((int) scape::ElementType::Pulse, bigSkin);
         pr->getElements().setScale (1, 60.0f);
         auto pf = juce::File (outDir).getChildFile ("big.scapepreset");
         pr->savePreset (pf);
         auto pr2 = std::make_unique<ScrapeScapeProcessor>();
         pr2->loadPreset (pf);
-        check (pr2->getSkins().get ((int) scape::ElementType::Bass).source.getWidth() == 4000
+        check (pr2->getSkins().get ((int) scape::ElementType::Pulse).source.getWidth() == 4000
                    && std::abs (pr2->getElements().get (1).scale - 60.0f) < 1e-3f,
                "presets keep the full-resolution photo and huge picture sizes");
         std::printf ("      preset with 4000 px photo: %.0f KB\n", (double) pf.getSize() / 1024.0);
@@ -451,7 +475,7 @@ int main (int argc, char** argv)
         fresh->getElements().add (scape::ElementType::Pluck, 0.55f, 0.45f, 1.2f);
         fresh->getElements().add (scape::ElementType::Chimes, 0.75f, 0.65f, 1.0f);
         fresh->getElements().add (scape::ElementType::Pad, 0.40f, 0.30f, 1.0f);
-        fresh->getElements().add (scape::ElementType::Spark, 0.62f, 0.40f, 0.8f);
+        fresh->getElements().add (scape::ElementType::Pulse, 0.62f, 0.40f, 0.8f);
         SceneCanvas* canvas = nullptr;
         for (auto* child : editor->getChildren())
             if (auto* c = dynamic_cast<SceneCanvas*> (child)) canvas = c;

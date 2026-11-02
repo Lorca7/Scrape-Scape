@@ -21,12 +21,11 @@ struct VoiceContext
     bool chordChanged = false;
 };
 
-// Per-voice influence of nearby Shade/Spark elements, combined with global controls.
+// Global controls as seen by a voice.
 struct VoiceMods
 {
     float brightness = 0.6f;   // 0..1
     float activity = 0.5f;     // 0..1
-    float reverbBoost = 0.0f;  // 0..1
 };
 
 struct VoiceBuses
@@ -106,7 +105,7 @@ private:
     void renderDrone (const VoiceBuses&, int start, int n, float gain) noexcept;
     void renderBowl (const VoiceBuses&, int start, int n, float gain) noexcept;
     void renderPluck (const VoiceBuses&, int start, int n, float gain) noexcept;
-    void renderBass (const VoiceBuses&, int start, int n, float gain) noexcept;
+    void renderPulse (const VoiceBuses&, int start, int n, float gain) noexcept;
     void renderShimmer (const VoiceBuses&, int start, int n, float gain, const VoiceContext&) noexcept;
     void renderChimes (const VoiceBuses&, int start, int n, float gain, const VoiceContext&) noexcept;
     void renderPad (const VoiceBuses&, int start, int n, float gain) noexcept;
@@ -152,12 +151,11 @@ private:
     std::array<PluckEvent, 6> motif {};
     int motifLength = 0, motifPos = 0, nextPluck = 0;
 
-    // ---- Bass -------------------------------------------------------------
-    float bassPhase = 0.0f;
-    dsp::OnePole bassFreq, bassEnv;
-    float bassTarget = 55.0f, bassEnvTarget = 0;
-    int bassHoldTicks = 0;
-    long long bassReturnTick = -1;
+    // ---- Pulse ------------------------------------------------------------
+    float pulsePhase = 0.0f, pulseInc = 0.0f, pulseEnv = 0.0f, pulseEnvMul = 0.999f, pulseAttackInc = 0.0f, pwmLfo = 0.0f;
+    int pulseAttackRemaining = 0, pulseRotation = 0, pulseStep = 0, lastPulseHits = -1;
+    std::array<bool, 16> pulsePattern {};
+    dsp::Svf pulseFilter;
 
     // ---- Shimmer ----------------------------------------------------------
     std::array<Grain, 10> grains;

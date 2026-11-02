@@ -66,7 +66,7 @@ void Voice::begin (const ElementSnapshot& e)
     rng.seed (seed);
     x = e.x; y = e.y; size = e.size;
     active = e.active;
-    sounding = ! getElementInfo (type).isModifier;
+    sounding = true;
     needsInitialPitch = true;
     activity = 0.0f;
     lastMood = nullptr;
@@ -83,12 +83,10 @@ void Voice::begin (const ElementSnapshot& e)
         case ElementType::Drone:   typeGain = 0.11f; sendRev = 0.65f; sendDly = 0.06f; break;
         case ElementType::Bowl:    typeGain = 0.28f; sendRev = 0.70f; sendDly = 0.12f; break;
         case ElementType::Pluck:   typeGain = 0.30f; sendRev = 0.50f; sendDly = 0.35f; break;
-        case ElementType::Bass:    typeGain = 0.13f; sendRev = 0.18f; sendDly = 0.00f; break;
+        case ElementType::Pulse:   typeGain = 0.40f; sendRev = 0.45f; sendDly = 0.45f; break;
         case ElementType::Shimmer: typeGain = 0.07f; sendRev = 0.85f; sendDly = 0.20f; break;
         case ElementType::Chimes:  typeGain = 0.13f; sendRev = 0.65f; sendDly = 0.22f; break;
         case ElementType::Pad:     typeGain = 0.125f; sendRev = 0.60f; sendDly = 0.10f; break;
-        case ElementType::Shade:
-        case ElementType::Spark:
         case ElementType::NumTypes: typeGain = 0.0f; sendRev = 0.0f; sendDly = 0.0f; break;
     }
 
@@ -110,13 +108,15 @@ void Voice::begin (const ElementSnapshot& e)
     for (auto& c : chimes) c.on = false;
     motifLength = motifPos = nextPluck = nextChime = 0;
 
-    // Bass
-    bassPhase = 0.0f;
-    bassFreq.setTime (0.1f, sr); bassFreq.reset (0.0f);
-    bassEnv.setTime (0.9f, sr);  bassEnv.reset (0.0f);
-    bassEnvTarget = 0.0f;
-    bassHoldTicks = 0;
-    bassReturnTick = -1;
+    // Pulse
+    pulsePhase = 0.0f;
+    pulseEnv = 0.0f;
+    pulseAttackRemaining = 0;
+    pulseStep = 0;
+    pulseRotation = rng.nextInt (16);
+    lastPulseHits = -1;
+    pwmLfo = rng.next01() * twoPi;
+    pulseFilter.reset();
 
     // Shimmer
     for (auto& g : grains) g.on = false;
@@ -163,11 +163,17 @@ void Voice::update (const ElementSnapshot& e, const VoiceMods& m, const VoicePar
         voiceLpR.set (cut, q, sr);
     }
 
-    if (type == ElementType::Bass)
-        bassFreq.setTime (0.02f + 1.5f * vp[kChar3] * vp[kChar3], sr);
-
-    if (getElementInfo (type).isModifier)
-        sounding = active;
+    if (type == ElementType::Pulse)
+    {
+        // Euclidean rhythm: hits spread as evenly as possible over 16 steps.
+        const int hits = pulseHitsFrom (vp[kChar1]);
+        if (hits != lastPulseHits)
+        {
+            for (int i = 0; i < 16; ++i)
+                pulsePattern[(size_t) i] = ((i * hits) % 16) < hits;
+            lastPulseHits = hits;
+        }
+    }
 }
 
 float Voice::pitchHz (const VoiceContext& ctx, int degree, int octave) const noexcept
@@ -178,7 +184,7 @@ float Voice::pitchHz (const VoiceContext& ctx, int degree, int octave) const noe
 //==============================================================================
 void Voice::onTick (const VoiceContext& ctx) noexcept
 {
-    if (! active || getElementInfo (type).isModifier)
+    if (! active)
         return;
 
     const bool newChord = ctx.chordChanged || needsInitialPitch || ctx.mood != lastMood;
@@ -235,35 +241,22 @@ void Voice::onTick (const VoiceContext& ctx) noexcept
             break;
         }
 
-        case ElementType::Bass:
+        case ElementType::Pulse:
         {
-            const int octave = (y < 0.4f ? -1 : -2) + std::clamp (octaveShift(), -1, 2);
-            ++bassHoldTicks;
-
-            if (newChord)
+            const int step = (int) ((ctx.tick + pulseRotation) % 16);
+            if (pulsePattern[(size_t) step] && rng.chance ((0.45f + 0.55f * act) * range (vp[kChar4], 0.1f, 1.9f)))
             {
-                bassTarget = pitchHz (ctx, ctx.chordRoot, octave);
-                if (needsInitialPitch) bassFreq.reset (bassTarget);
-                bassEnvTarget = 1.0f;
-                bassEnv.setTime (std::max (0.05f, attackSecondsFrom (vp[kAttack]) * 0.6f), sr);
-                bassHoldTicks = 0;
+                // A gentle arpeggio over the chord: root, fifth, third, fifth...
+                static constexpr int seq[] = { 0, 4, 2, 4 };
+                const int octave = (y < 0.4f ? 1 : (y > 0.75f ? -1 : 0)) + octaveShift();
+                const float f = pitchHz (ctx, ctx.chordRoot + seq[pulseStep++ & 3], octave);
+                pulseInc = f / sr;
+                const float peak = rng.range (0.6f, 1.0f);
+                pulseAttackRemaining = std::max (1, (int) (0.004f * sr));
+                pulseAttackInc = (peak - pulseEnv) / (float) pulseAttackRemaining;
+                pulseEnvMul = decayMultiplier (range (vp[kRelease], 0.12f, 1.6f) * (0.8f + 0.4f * size), sr);
+                pulseFilter.set (f * (4.0f + 12.0f * mods.brightness), 0.8f, sr);
                 activity = 1.0f;
-            }
-            else if (bassHoldTicks == 24)
-            {
-                bassEnvTarget = 0.65f;
-                bassEnv.setTime (4.0f, sr);
-            }
-
-            if ((ctx.tick % 16) == 8 && rng.chance ((0.04f + 0.16f * act) * 2.0f * vp[kChar4]))
-            {
-                bassTarget = pitchHz (ctx, ctx.chordRoot + 4, octave);
-                bassReturnTick = ctx.tick + 4;
-                activity = 0.8f;
-            }
-            else if (ctx.tick == bassReturnTick)
-            {
-                bassTarget = pitchHz (ctx, ctx.chordRoot, octave);
             }
             break;
         }
@@ -286,8 +279,6 @@ void Voice::onTick (const VoiceContext& ctx) noexcept
             break;
 
         case ElementType::Shimmer:
-        case ElementType::Shade:
-        case ElementType::Spark:
         case ElementType::NumTypes:
             break;
     }
@@ -442,7 +433,7 @@ void Voice::retunePad (const VoiceContext& ctx) noexcept
 //==============================================================================
 void Voice::render (const VoiceBuses& b, int start, int n, const VoiceContext& ctx) noexcept
 {
-    if (! sounding || getElementInfo (type).isModifier || ctx.mood == nullptr)
+    if (! sounding || ctx.mood == nullptr)
         return;
 
     fade.coeff = active ? fadeInCoeff : fadeOutCoeff;
@@ -451,7 +442,7 @@ void Voice::render (const VoiceBuses& b, int start, int n, const VoiceContext& c
     const float pan = advance (panSmooth, basePan(), n);
     panGains (pan, curGl, curGr);
 
-    curRev = sendRev + 0.45f * mods.reverbBoost;
+    curRev = sendRev;
     curDly = sendDly;
 
     const float gain = g * typeGain * std::pow (level, 1.2f) * levelGainFrom (vp[kLevel]);
@@ -461,12 +452,10 @@ void Voice::render (const VoiceBuses& b, int start, int n, const VoiceContext& c
         case ElementType::Drone:   renderDrone (b, start, n, gain); break;
         case ElementType::Bowl:    renderBowl (b, start, n, gain); break;
         case ElementType::Pluck:   renderPluck (b, start, n, gain); break;
-        case ElementType::Bass:    renderBass (b, start, n, gain); break;
+        case ElementType::Pulse:   renderPulse (b, start, n, gain); break;
         case ElementType::Shimmer: renderShimmer (b, start, n, gain, ctx); break;
         case ElementType::Chimes:  renderChimes (b, start, n, gain, ctx); break;
         case ElementType::Pad:     renderPad (b, start, n, gain); break;
-        case ElementType::Shade:
-        case ElementType::Spark:
         case ElementType::NumTypes: break;
     }
 
@@ -582,27 +571,29 @@ void Voice::renderPluck (const VoiceBuses& b, int start, int n, float gain) noex
     }
 }
 
-void Voice::renderBass (const VoiceBuses& b, int start, int n, float gain) noexcept
+void Voice::renderPulse (const VoiceBuses& b, int start, int n, float gain) noexcept
 {
-    float gl, gr;
-    panGains ((x * 2.0f - 1.0f) * 0.25f, gl, gr);
-    const float drive = 0.4f + 3.0f * vp[kChar1];
-    const float body = vp[kChar2];
-    const float norm = 0.76f / std::tanh (drive);
+    // Pulse wave from two band-limited saws; its width breathes with a slow PWM LFO.
+    const float baseWidth = range (vp[kChar2], 0.5f, 0.08f);
+    const float pwmDepth = 0.85f * vp[kChar3];
+    const float pwmRate = 0.2f + 2.5f * vp[kChar3];
 
     for (int i = start; i < start + n; ++i)
     {
-        const float f = bassFreq.process (bassTarget);
-        const float env = bassEnv.process (bassEnvTarget);
-        const float p = twoPi * bassPhase;
-        bassPhase = wrap (bassPhase + f / sr);
+        if (pulseAttackRemaining > 0) { pulseEnv += pulseAttackInc; --pulseAttackRemaining; }
+        else                          { pulseEnv *= pulseEnvMul; }
 
-        const float raw = std::sin (p) + body * (0.35f * std::sin (2.0f * p) + 0.15f * std::sin (3.0f * p));
-        const float s = std::tanh (drive * raw) * norm * env * gain;
-        emit (b, i, s * gl, s * gr);
+        pwmLfo += twoPi * pwmRate / sr;
+        if (pwmLfo > twoPi) pwmLfo -= twoPi;
+        const float width = std::clamp (baseWidth + pwmDepth * baseWidth * std::sin (pwmLfo), 0.03f, 0.97f);
+
+        auto saw = [this] (float p) { return 2.0f * p - 1.0f - BlepSaw::blep (p, pulseInc); };
+        const float pulse = 0.5f * (saw (pulsePhase) - saw (wrap (pulsePhase + width)));
+        pulsePhase = wrap (pulsePhase + pulseInc);
+
+        const float v = pulseFilter.lowpass (pulse) * pulseEnv * gain;
+        emit (b, i, v * curGl * 1.41f, v * curGr * 1.41f);
     }
-
-    activity = std::max (activity, bassEnv.z * 0.6f);
 }
 
 void Voice::renderShimmer (const VoiceBuses& b, int start, int n, float gain, const VoiceContext& ctx) noexcept

@@ -64,12 +64,10 @@ The first build downloads JUCE 8 automatically, so it takes a few minutes. The o
 - **Drone**: an ethereal, slowly breathing drone with airy octave and fifth shimmer. Its horizontal position picks root, third or fifth.
 - **Bowl**: crystal singing bowls with pure, slowly beating tones, struck or softly swelling in.
 - **Pluck**: a versatile pluck synth, from soft sine harp to bright saw and square plucks, playing wandering figures.
-- **Bass**: deep, soft root notes that glide with the chord changes.
+- **Pulse**: a pulse-wave synth playing gentle repeating rhythms over the chord, with PWM shimmer and lots of echo.
 - **Shimmer**: a cloud of tiny high sine grains with octave sparkles.
 - **Chimes**: tuned wind chimes that ring out in clusters when the breeze picks up.
 - **Pad**: a lush, evolving chord pad of detuned voices.
-- **Shade** (modifier): darkens, calms and adds reverb to everything inside its dashed circle.
-- **Spark** (modifier): brightens and energises everything inside its circle.
 
 A shared conductor moves through a slow chord progression, so every element stays in harmony. Each
 element has its own random seed, so no two placements behave the same way.
@@ -98,7 +96,7 @@ Each engine also has four controls that shape its character (the second row of k
 | Drone | Detune (layer width), Sub (sub-octave), Shimmer (airy octave/fifth partials), Motion (slow drift and breathing) |
 | Bowl | Ring (pure crystal to rich metal overtones), Beat (speed of the slow wah-wah), Swell (struck to softly sung), Density |
 | Pluck | Wave (sine → triangle → saw → square), Snap (bright, percussive attack), Density, Speed |
-| Bass | Drive, Body (upper harmonics), Glide, Walk (steps to the fifth) |
+| Pulse | Pattern (hits per bar), Width (hollow square to thin and reedy), PWM (moving, chorused pulse width), Density |
 | Shimmer | Rate, Length (glitter to smooth haze), Spread, Sparkle (octave-up grains) |
 | Chimes | Breeze (gust strength), Cluster (how many ring together), Metal (bamboo-soft to bright tubes), Spread |
 | Pad | Detune (thin to lush), Warmth (bright saw to soft), Voicing (close triad to wide open chord), Motion |
@@ -111,17 +109,16 @@ them grouped by engine.
 
 While the music plays, the canvas visualises it:
 
-- **Particles** stream from every sounding element: slow spirals from Drones, sparks from Bells,
-  streaks from Plucks, soft blobs from Bass, glitter from Shimmer, flowing currents from Wind.
+- **Particles** stream from every sounding element: slow spirals from Drones, orbiting motes from Bowls,
+  streaks from Plucks, bright beats from Pulse, glitter from Shimmer, falling glints from Chimes, soft glowing clouds from Pad.
   They're pulled into **orbits around other elements** and **take on the colours** of what they
   pass near, so new colours and patterns emerge where sounds meet.
-- **Ripples** spread from struck sounds (circles for Bells and Bass, bursts for Plucks, squares for
+- **Ripples** spread from struck sounds (rings for Bowls, bursts for Plucks, glinting dot rings for Chimes, squares for
   Pulse). **Where ripples from different elements cross, sparks appear**, an interference pattern
   that keeps changing.
 - **Threads** link neighbouring elements and vibrate with their combined activity.
 - **Drones trace rotating rose curves** that build into spirographs. The number of petals follows
   the current chord.
-- **Shade** zones slow particles and tint them violet. **Spark** zones speed them up and brighten them.
 
 The visuals follow the controls, including whatever the LFOs are doing at that moment. Cutoff shifts an
 engine's hue, Level sets how much it emits, Release makes ripples and particles last longer, Reverb
@@ -200,7 +197,7 @@ crossfades when you change mood. The **Backdrop** knob sets its strength (0 = pl
 
 Any element can be drawn with your own picture instead of its built-in icon.
 
-1. **Drag an image file onto a palette slot** (Drone, Bell, Shade, ...). If you drop it anywhere else
+1. **Drag an image file onto a palette slot** (Drone, Bowl, Chimes, ...). If you drop it anywhere else
    in the window, it goes to the currently selected slot. You can also right-click a slot and choose
    **Use an image...**.
 2. In the outline editor, pick how to select the part you want:

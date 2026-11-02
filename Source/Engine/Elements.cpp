@@ -8,15 +8,13 @@ namespace scape
 const ElementInfo& getElementInfo (ElementType type) noexcept
 {
     static const ElementInfo infos[kNumElementTypes] = {
-        { "Drone",   "An ethereal, slowly breathing drone with airy octave and fifth shimmer. Higher on the canvas = higher register.", 0xff8fc3ffu, false },
-        { "Bowl",    "Crystal singing bowls: pure, slowly beating tones that are struck or swell in.",                                  0xffc7ecffu, false },
-        { "Pluck",   "A versatile pluck synth: from soft sine harp to bright saw and square plucks.",                                   0xff9cf2c0u, false },
-        { "Bass",    "Deep, soft root notes that glide with the chord changes.",                                                        0xffb38cffu, false },
-        { "Shimmer", "A cloud of tiny high sine grains with octave sparkles.",                                                          0xffe6f7ffu, false },
-        { "Chimes",  "Tuned wind chimes that ring out in clusters when the breeze picks up.",                                           0xffffe6a3u, false },
-        { "Pad",     "A lush, evolving chord pad of detuned voices.",                                                                   0xffe0b0ffu, false },
-        { "Shade",   "Modifier: darkens, calms and drowns nearby elements in reverb.",          0xff7a74a8u, true  },
-        { "Spark",   "Modifier: brightens nearby elements and makes them more active.",         0xffffef5au, true  },
+        { "Drone",   "An ethereal, slowly breathing drone with airy octave and fifth shimmer. Higher on the canvas = higher register.", 0xff8fc3ffu },
+        { "Bowl",    "Crystal singing bowls: pure, slowly beating tones that are struck or swell in.",                                  0xffc7ecffu },
+        { "Pluck",   "A versatile pluck synth: from soft sine harp to bright saw and square plucks.",                                   0xff9cf2c0u },
+        { "Pulse",   "A pulse-wave synth playing gentle repeating patterns of chord tones, with PWM shimmer.",                          0xffff9a8cu },
+        { "Shimmer", "A cloud of tiny high sine grains with octave sparkles.",                                                          0xffe6f7ffu },
+        { "Chimes",  "Tuned wind chimes that ring out in clusters when the breeze picks up.",                                           0xffffe6a3u },
+        { "Pad",     "A lush, evolving chord pad of detuned voices.",                                                                   0xffe0b0ffu },
     };
 
     const int i = std::clamp ((int) type, 0, kNumElementTypes - 1);

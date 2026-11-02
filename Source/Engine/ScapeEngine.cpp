@@ -142,24 +142,10 @@ void ScapeEngine::syncVoices (ElementBank& bank) noexcept
     for (int i = 0; i < kMaxElements; ++i)
     {
         const auto& s = snapshots[(size_t) i];
-        float spark = 0.0f, shade = 0.0f;
-
-        for (int j = 0; j < kMaxElements; ++j)
-        {
-            const auto& m = snapshots[(size_t) j];
-            if (j == i || ! m.active) continue;
-            if (m.type != (int) ElementType::Spark && m.type != (int) ElementType::Shade) continue;
-
-            const float radius = 0.3f * m.size;
-            const float d = std::hypot (m.x - s.x, m.y - s.y);
-            const float influence = std::max (0.0f, 1.0f - d / radius) * m.size;
-            (m.type == (int) ElementType::Spark ? spark : shade) += influence;
-        }
 
         VoiceMods mods;
-        mods.brightness = std::clamp (globalBright + 0.45f * spark - 0.45f * shade, 0.0f, 1.0f);
-        mods.activity = std::clamp (params.activity * (1.0f + 0.8f * spark - 0.6f * shade) + 0.15f * spark, 0.0f, 1.0f);
-        mods.reverbBoost = std::clamp (shade, 0.0f, 1.0f);
+        mods.brightness = globalBright;
+        mods.activity = std::clamp (params.activity, 0.0f, 1.0f);
 
         // Inactive slots keep their old seed so the voice can fade its tail out.
         ElementSnapshot e = s;

@@ -8,19 +8,16 @@
 namespace scape
 {
 
-// The building blocks a user can place on the canvas. Sound elements generate
-// audio; modifier elements (Shade, Spark) colour the elements around them.
+// The sound engines a user can place on the canvas.
 enum class ElementType : int
 {
     Drone = 0,
     Bowl,
     Pluck,
-    Bass,
+    Pulse,
     Shimmer,
     Chimes,
     Pad,
-    Shade,
-    Spark,
     NumTypes
 };
 
@@ -32,7 +29,6 @@ struct ElementInfo
     const char* name;
     const char* description;
     std::uint32_t colour;   // ARGB
-    bool isModifier;
 };
 
 const ElementInfo& getElementInfo (ElementType type) noexcept;
